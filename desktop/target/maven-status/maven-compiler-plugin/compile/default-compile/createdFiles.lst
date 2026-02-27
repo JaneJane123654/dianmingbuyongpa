@@ -1,0 +1,9 @@
+com\classroomassistant\desktop\ui\MainController$1.class
+com\classroomassistant\desktop\Launcher.class
+com\classroomassistant\desktop\platform\DesktopPlatformProvider.class
+com\classroomassistant\desktop\platform\DesktopStorage.class
+com\classroomassistant\desktop\platform\DesktopAudioRecorder.class
+com\classroomassistant\desktop\platform\DesktopPreferences.class
+com\classroomassistant\desktop\MainApp.class
+com\classroomassistant\desktop\platform\DesktopSecureStorage.class
+com\classroomassistant\desktop\ui\MainController.class

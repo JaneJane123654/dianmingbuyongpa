@@ -1,7 +1,16 @@
+/* ============================================
+ * 课堂助手 - 主样式表
+ * ============================================ */
+
+/* 根样式 */
 .root {
     -fx-font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
     -fx-background-color: #f5f5f5;
 }
+
+/* ============================================
+ * 面板样式
+ * ============================================ */
 
 .status-panel {
     -fx-background-color: white;
@@ -19,6 +28,10 @@
     -fx-background-radius: 6px;
 }
 
+/* ============================================
+ * 按钮样式
+ * ============================================ */
+
 .primary-button {
     -fx-background-color: #2196F3;
     -fx-text-fill: white;
@@ -26,6 +39,16 @@
     -fx-cursor: hand;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+    -fx-background-radius: 4px;
+}
+
+.primary-button:hover {
+    -fx-background-color: #1976D2;
+}
+
+.primary-button:disabled {
+    -fx-background-color: #BDBDBD;
+    -fx-text-fill: #757575;
 }
 
 .stop-button {
@@ -35,6 +58,16 @@
     -fx-cursor: hand;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+    -fx-background-radius: 4px;
+}
+
+.stop-button:hover {
+    -fx-background-color: #D32F2F;
+}
+
+.stop-button:disabled {
+    -fx-background-color: #BDBDBD;
+    -fx-text-fill: #757575;
 }
 
 .secondary-button {
@@ -43,7 +76,29 @@
     -fx-padding: 10px 18px;
     -fx-cursor: hand;
     -fx-font-size: 14px;
+    -fx-background-radius: 4px;
 }
+
+.secondary-button:hover {
+    -fx-background-color: #E0E0E0;
+}
+
+.small-button {
+    -fx-background-color: #E0E0E0;
+    -fx-text-fill: #333333;
+    -fx-padding: 4px 10px;
+    -fx-cursor: hand;
+    -fx-font-size: 11px;
+    -fx-background-radius: 3px;
+}
+
+.small-button:hover {
+    -fx-background-color: #BDBDBD;
+}
+
+/* ============================================
+ * 标签样式
+ * ============================================ */
 
 .status-label {
     -fx-font-size: 13px;
@@ -55,3 +110,155 @@
     -fx-text-fill: #666666;
 }
 
+.success-label {
+    -fx-text-fill: #4CAF50;
+    -fx-font-weight: bold;
+}
+
+.warning-label {
+    -fx-text-fill: #FF9800;
+    -fx-font-weight: bold;
+}
+
+.error-label {
+    -fx-text-fill: #F44336;
+    -fx-font-weight: bold;
+}
+
+.model-info-icon {
+    -fx-background-color: white;
+    -fx-border-color: #CCCCCC;
+    -fx-background-radius: 50%;
+    -fx-border-radius: 50%;
+    -fx-min-width: 18px;
+    -fx-min-height: 18px;
+    -fx-max-width: 18px;
+    -fx-max-height: 18px;
+    -fx-alignment: center;
+}
+
+.model-info-icon:hover {
+    -fx-border-color: #2196F3;
+}
+
+.model-info-icon-text {
+    -fx-font-size: 10px;
+    -fx-text-fill: #666666;
+    -fx-font-weight: bold;
+}
+
+/* ============================================
+ * 文本区域样式
+ * ============================================ */
+
+.text-area {
+    -fx-background-color: #FAFAFA;
+}
+
+.text-area .content {
+    -fx-background-color: #FAFAFA;
+}
+
+.log-text {
+    -fx-font-family: "Consolas", "Monaco", "Courier New", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: #333333;
+    -fx-control-inner-background: #FAFAFA;
+}
+
+/* ============================================
+ * 进度条样式
+ * ============================================ */
+
+.progress-bar {
+    -fx-pref-height: 8px;
+}
+
+.progress-bar > .track {
+    -fx-background-color: #E0E0E0;
+    -fx-background-radius: 4px;
+}
+
+.progress-bar > .bar {
+    -fx-background-color: #4CAF50;
+    -fx-background-radius: 4px;
+}
+
+/* ============================================
+ * 输入控件样式
+ * ============================================ */
+
+.text-field, .password-field {
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 8px;
+}
+
+.text-field:focused, .password-field:focused {
+    -fx-border-color: #2196F3;
+}
+
+.combo-box {
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+}
+
+.spinner {
+    -fx-background-color: white;
+}
+
+.spinner .increment-arrow-button, .spinner .decrement-arrow-button {
+    -fx-background-color: #EEEEEE;
+}
+
+.check-box {
+    -fx-text-fill: #333333;
+}
+
+/* ============================================
+ * 滚动条样式
+ * ============================================ */
+
+.scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .track {
+    -fx-background-color: #F5F5F5;
+    -fx-background-radius: 4px;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #BDBDBD;
+    -fx-background-radius: 4px;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #9E9E9E;
+}
+
+/* ============================================
+ * 动画与过渡效果
+ * ============================================ */
+
+.recording-indicator {
+    -fx-background-color: #F44336;
+    -fx-background-radius: 50%;
+}
+
+/* 录音状态脉冲动画 - 通过代码控制 */
+.recording-pulse {
+    -fx-effect: dropshadow(gaussian, rgba(244, 67, 54, 0.5), 10, 0, 0, 0);
+}

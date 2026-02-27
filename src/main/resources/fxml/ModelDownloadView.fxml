@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.classroomassistant.ui.ModelDownloadController"
+            prefWidth="500" prefHeight="400">
+    <top>
+        <HBox spacing="10" padding="12" alignment="CENTER_LEFT">
+            <Label text="模型下载" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="totalStatusLabel" text="" styleClass="info-label"/>
+        </HBox>
+    </top>
+
+    <center>
+        <VBox spacing="12" padding="12">
+            <!-- 说明面板 -->
+            <VBox spacing="8" styleClass="status-panel">
+                <Label text="需要下载的模型" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                <Label fx:id="descriptionLabel" text="首次使用需要下载语音识别相关模型，请确保网络连接正常。" 
+                       styleClass="info-label" wrapText="true"/>
+            </VBox>
+
+            <!-- 模型列表 -->
+            <VBox fx:id="modelListContainer" spacing="8" VBox.vgrow="ALWAYS" styleClass="status-panel">
+                <Label text="模型列表" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <content>
+                        <VBox fx:id="modelItemsBox" spacing="8"/>
+                    </content>
+                </ScrollPane>
+            </VBox>
+
+            <!-- 当前下载状态 -->
+            <VBox spacing="8" styleClass="status-panel">
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="下载状态" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="speedLabel" text="" styleClass="info-label"/>
+                </HBox>
+                <Label fx:id="currentModelLabel" text="等待开始..." styleClass="status-label"/>
+                <ProgressBar fx:id="downloadProgressBar" prefWidth="Infinity" maxWidth="Infinity"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label fx:id="progressLabel" text="0%" styleClass="info-label"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="sizeLabel" text="" styleClass="info-label"/>
+                </HBox>
+            </VBox>
+        </VBox>
+    </center>
+
+    <bottom>
+        <HBox spacing="10" padding="12" alignment="CENTER_RIGHT">
+            <Label fx:id="errorLabel" text="" styleClass="error-label" HBox.hgrow="ALWAYS"/>
+            <Button fx:id="startButton" text="开始下载" styleClass="primary-button" onAction="#startDownload"/>
+            <Button fx:id="cancelButton" text="取消" styleClass="secondary-button" onAction="#cancel" disable="true"/>
+            <Button fx:id="skipButton" text="跳过（使用云端API）" styleClass="secondary-button" onAction="#skip"/>
+        </HBox>
+    </bottom>
+</BorderPane>

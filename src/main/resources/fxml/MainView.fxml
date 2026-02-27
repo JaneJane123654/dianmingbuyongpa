@@ -10,6 +10,7 @@
         <HBox spacing="10" padding="12">
             <Label text="学生课堂挂机程序 v3.0" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
             <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="engineStatusLabel" text="" styleClass="info-label"/>
             <Button fx:id="settingsButton" text="设置" styleClass="secondary-button" onAction="#openSettings"/>
         </HBox>
     </top>
@@ -17,7 +18,11 @@
     <center>
         <VBox spacing="12" padding="12">
             <VBox spacing="8" styleClass="status-panel">
-                <Label text="录音与检测状态" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="录音与检测状态" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="modelStatusLabel" text="" styleClass="info-label"/>
+                </HBox>
                 <GridPane hgap="10" vgap="8">
                     <columnConstraints>
                         <ColumnConstraints percentWidth="22"/>
@@ -44,6 +49,15 @@
 
                 <Label text="AI 回答（流式）" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
                 <TextArea fx:id="answerTextArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS"/>
+            </VBox>
+
+            <VBox fx:id="logPanel" spacing="4" styleClass="status-panel" managed="true" visible="true">
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="运行日志" style="-fx-font-size: 13px; -fx-font-weight: bold;"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="clearLogButton" text="清空" styleClass="small-button" onAction="#clearLog"/>
+                </HBox>
+                <TextArea fx:id="logTextArea" editable="false" wrapText="true" prefRowCount="4" styleClass="log-text"/>
             </VBox>
         </VBox>
     </center>

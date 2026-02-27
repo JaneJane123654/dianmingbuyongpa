@@ -49,6 +49,13 @@
                     </VBox>
 
                     <VBox spacing="8" styleClass="status-panel">
+                        <Label text="语音识别（云端 API）" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label text="使用 Groq Whisper 等云端服务进行语音识别" styleClass="info-label"/>
+                        <Label text="Speech API Key（加密保存）" styleClass="info-label"/>
+                        <PasswordField fx:id="speechApiKeyField" promptText="如 Groq API Key"/>
+                    </VBox>
+
+                    <VBox spacing="8" styleClass="status-panel">
                         <Label text="AI 问答" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <Label text="模型平台" styleClass="info-label"/>
@@ -60,6 +67,14 @@
                         </HBox>
                         <Label text="Access Token / API Key（加密保存）" styleClass="info-label"/>
                         <PasswordField fx:id="tokenField" promptText="未输入则不保存"/>
+                    </VBox>
+
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="模型管理" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label fx:id="modelDownloadStatusLabel" text="" styleClass="info-label"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button fx:id="openModelDownloadButton" text="打开模型管理" styleClass="secondary-button" onAction="#openModelManager"/>
+                        </HBox>
                     </VBox>
                 </VBox>
             </content>
@@ -75,4 +90,3 @@
         </HBox>
     </bottom>
 </BorderPane>
-

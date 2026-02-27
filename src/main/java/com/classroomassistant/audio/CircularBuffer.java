@@ -4,9 +4,20 @@ import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 环形缓冲区
+ * 环形缓冲区 (Circular Buffer)
  *
- * <p>用于存储固定容量的 PCM 音频字节，支持覆盖写入与回溯读取。
+ * <p>用于高效存储固定容量的 PCM 音频字节数据。支持并发安全的覆盖写入与回溯读取。
+ * 当写入数据超过缓冲区容量时，会自动覆盖最旧的数据，保持缓冲区始终包含最新的音频流。
+ *
+ * <p>使用示例：
+ * <pre>
+ * CircularBuffer buffer = new CircularBuffer(16000 * 2 * 10); // 存储 10 秒 16kHz 16bit 音频
+ * buffer.write(audioData);
+ * byte[] latest3Seconds = buffer.readLatestBytes(16000 * 2 * 3);
+ * </pre>
+ *
+ * @author Code Assistant
+ * @date 2026-01-31
  */
 public class CircularBuffer {
 
@@ -17,9 +28,10 @@ public class CircularBuffer {
     private int size;
 
     /**
-     * 构造环形缓冲区
+     * 构造一个具有指定容量的环形缓冲区
      *
-     * @param capacityBytes 容量（字节）
+     * @param capacityBytes 缓冲区容量（字节数）
+     * @throws IllegalArgumentException 如果 capacityBytes <= 0
      */
     public CircularBuffer(int capacityBytes) {
         if (capacityBytes <= 0) {
@@ -29,9 +41,12 @@ public class CircularBuffer {
     }
 
     /**
-     * 写入字节数据（超出容量将覆盖最旧数据）
+     * 向缓冲区写入音频字节数据
+     * <p>如果数据长度超过缓冲区容量，将仅保留数据末尾符合容量的部分。
+     * 该操作是线程安全的。
      *
-     * @param data 音频字节数据
+     * @param data 要写入的原始音频字节数组
+     * @throws NullPointerException 如果 data 为 null
      */
     public void write(byte[] data) {
         Objects.requireNonNull(data, "写入数据不能为空");
@@ -65,10 +80,12 @@ public class CircularBuffer {
     }
 
     /**
-     * 读取最新 N 字节数据
+     * 从缓冲区读取最新的 N 字节数据
+     * <p>该操作是线程安全的，且不会清除缓冲区内的数据。
      *
-     * @param lengthBytes 读取长度（字节）
-     * @return 最新音频数据
+     * @param lengthBytes 期望读取的长度（字节数）
+     * @return 包含最新音频数据的字节数组。如果缓冲区内可用数据不足，则返回实际可用的所有数据。
+     * @throws IllegalArgumentException 如果 lengthBytes <= 0
      */
     public byte[] readLatestBytes(int lengthBytes) {
         if (lengthBytes <= 0) {
@@ -101,30 +118,7 @@ public class CircularBuffer {
     }
 
     /**
-     * 当前缓冲区内已写入的字节数
-     *
-     * @return 已写入字节数
-     */
-    public int getSizeBytes() {
-        lock.lock();
-        try {
-            return size;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * 缓冲区容量（字节）
-     *
-     * @return 容量
-     */
-    public int getCapacityBytes() {
-        return buffer.length;
-    }
-
-    /**
-     * 清空缓冲区
+     * 清空缓冲区数据
      */
     public void clear() {
         lock.lock();
@@ -134,5 +128,28 @@ public class CircularBuffer {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * 获取缓冲区当前已存储的数据大小
+     *
+     * @return 当前存储的字节数
+     */
+    public int getSize() {
+        lock.lock();
+        try {
+            return size;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 获取缓冲区的总容量
+     *
+     * @return 总容量（字节数）
+     */
+    public int getCapacity() {
+        return buffer.length;
     }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">课堂助手</string>
+    <string name="start_monitoring">开始监听</string>
+    <string name="stop_monitoring">停止监听</string>
+    <string name="settings">设置</string>
+    <string name="status_idle">空闲</string>
+    <string name="status_monitoring">监听中...</string>
+    <string name="status_processing">处理中...</string>
+    <string name="status_error">错误</string>
+</resources>

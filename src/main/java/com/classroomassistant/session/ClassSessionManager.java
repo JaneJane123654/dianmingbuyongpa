@@ -29,9 +29,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 课堂会话编排器
+ * 课堂会话编排器 (Class Session Manager)
  *
- * <p>负责串联录音、识别与 AI 处理的流程。
+ * <p>作为系统的核心大脑，负责协调音频录制 (AudioRecorder)、语音识别 (SpeechServices)、
+ * 大模型处理 (LLMClient) 以及 UI 状态更新。它实现了完整的业务流：
+ * 唤醒检测 -> 静音检测 -> 语音识别 -> AI 回答生成 -> 录音保存。
+ *
+ * @author Code Assistant
+ * @date 2026-01-31
  */
 public class ClassSessionManager {
 
@@ -61,10 +66,26 @@ public class ClassSessionManager {
     private final AtomicReference<SessionState> sessionState = new AtomicReference<>(SessionState.IDLE);
     private final AtomicBoolean listenersRegistered = new AtomicBoolean(false);
     private final AtomicBoolean aiTokenWarned = new AtomicBoolean(false);
+    private Runnable openSettingsCallback;
+    private java.util.function.Consumer<String> logCallback;
     private UserPreferences currentPreferences;
     private long lastTriggerAtMillis;
     private int quietMillis;
 
+    /**
+     * 构造函数，注入所有必需的服务组件
+     *
+     * @param configManager      配置管理器
+     * @param preferencesManager 偏好设置管理器
+     * @param taskScheduler      异步任务调度器
+     * @param healthMonitor      系统健康监控器
+     * @param notificationService 消息通知服务
+     * @param modelRepository    模型仓库
+     * @param recordingRepository 录音文件仓库
+     * @param audioRecorder      音频录制引擎
+     * @param speechServices     语音服务（含识别、唤醒、静音检测）
+     * @param llmClient          AI 大模型客户端
+     */
     public ClassSessionManager(
         ConfigManager configManager,
         PreferencesManager preferencesManager,
@@ -90,9 +111,9 @@ public class ClassSessionManager {
     }
 
     /**
-     * 初始化会话
+     * 初始化会话管理器并应用用户偏好设置
      *
-     * @param prefs 用户配置
+     * @param prefs 用户偏好设置实例 {@link UserPreferences}
      */
     public void initialize(UserPreferences prefs) {
         applySettings(prefs);
@@ -107,7 +128,8 @@ public class ClassSessionManager {
     }
 
     /**
-     * 启动上课流程
+     * 启动整个课堂辅助系统的录制与检测流程
+     * <p>开启音频录制，并开始监听唤醒词。
      */
     public void startClass() {
         if (!sessionState.compareAndSet(SessionState.IDLE, SessionState.MONITORING)) {
@@ -120,11 +142,11 @@ public class ClassSessionManager {
         updateText(hintTextProperty, "正在监听");
         healthMonitor.startWatchdog();
         quietMillis = 0;
-        logger.info("会话已进入监听状态");
+        log("开始录音，进入监听状态");
     }
 
     /**
-     * 停止上课流程
+     * 停止录制与检测流程
      */
     public void stopClass() {
         sessionState.set(SessionState.IDLE);
@@ -135,13 +157,13 @@ public class ClassSessionManager {
         updateText(hintTextProperty, "已停止");
         healthMonitor.stopWatchdog();
         quietMillis = 0;
-        logger.info("会话已停止");
+        log("停止录音，会话已结束");
     }
 
     /**
-     * 应用设置
+     * 应用新的用户偏好设置
      *
-     * @param prefs 配置
+     * @param prefs 包含各项设置的 {@link UserPreferences} 对象
      */
     public void applySettings(UserPreferences prefs) {
         Objects.requireNonNull(prefs, "配置不能为空");
@@ -198,6 +220,34 @@ public class ClassSessionManager {
         return hintTextProperty;
     }
 
+    /**
+     * 设置打开设置页的回调（供 Token 缺失时自动触发）
+     *
+     * @param callback 打开设置页的回调函数
+     */
+    public void setOpenSettingsCallback(Runnable callback) {
+        this.openSettingsCallback = callback;
+    }
+
+    /**
+     * 设置日志回调（用于 UI 显示运行日志）
+     *
+     * @param callback 接收日志消息的回调函数
+     */
+    public void setLogCallback(java.util.function.Consumer<String> callback) {
+        this.logCallback = callback;
+    }
+
+    /**
+     * 发送日志到回调
+     */
+    private void log(String message) {
+        logger.info(message);
+        if (logCallback != null) {
+            logCallback.accept(message);
+        }
+    }
+
     private void checkModelsOnStartup() {
         boolean requireSherpa = !"FAKE".equalsIgnoreCase(configManager.getSpeechEngineDefault());
         ModelCheckResult result = modelRepository.checkRequiredModels(requireSherpa);
@@ -223,12 +273,51 @@ public class ClassSessionManager {
         audioRecorder.addListener(this::handleAudioFrame);
         speechServices.getSilenceDetector().addListener(this::handleSilenceTimeout);
         speechServices.getWakeWordDetector().addListener(this::handleWakeWordDetected);
+        
+        // 设置健康监控回调
+        healthMonitor.setRecoveryCallback(this::attemptAudioRecovery);
+        healthMonitor.setErrorCallback(this::handleHealthError);
+    }
+
+    /**
+     * 尝试恢复音频录制链路
+     */
+    private void attemptAudioRecovery() {
+        if (sessionState.get() != SessionState.MONITORING) {
+            return;
+        }
+        log("正在尝试恢复音频录制...");
+        updateText(hintTextProperty, "正在恢复录音...");
+        try {
+            audioRecorder.stopRecording();
+            Thread.sleep(500);
+            audioRecorder.startRecording();
+            log("音频录制恢复成功");
+            updateText(hintTextProperty, "录音已恢复");
+        } catch (Exception e) {
+            logger.error("恢复音频录制失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 处理健康监控错误状态
+     */
+    private void handleHealthError() {
+        sessionState.set(SessionState.ERROR);
+        updateText(hintTextProperty, "录音异常，请检查麦克风");
+        updateText(detectionStatusTextProperty, "错误");
+        notificationService.showError("录音异常", "音频录制连续失败，请检查麦克风权限或重新启动");
+        log("进入错误状态，需要用户干预");
     }
 
     private void handleAudioFrame(byte[] data) {
         if (sessionState.get() != SessionState.MONITORING) {
             return;
         }
+        
+        // 标记音频帧已接收，用于健康监控
+        healthMonitor.markAudioFrameReceived();
+        
         float[] frame = AudioUtils.pcmToFloat(data);
         speechServices.getWakeWordDetector().detect(frame);
 
@@ -267,14 +356,17 @@ public class ClassSessionManager {
         }
         lastTriggerAtMillis = now;
         updateText(detectionStatusTextProperty, reason);
+        log("触发识别: " + reason);
 
         int lookbackSeconds = currentPreferences == null
             ? configManager.getAudioConfig().defaultLookbackSeconds()
             : currentPreferences.getAudioLookbackSeconds();
         byte[] pcm = audioRecorder.getAudioBefore(lookbackSeconds);
+        log("开始语音识别，回溯 " + lookbackSeconds + " 秒音频");
         speechServices.getSpeechRecognizer().recognizeAsync(pcm, new RecognitionListener() {
             @Override
             public void onResult(String text) {
+                log("语音识别完成: " + (text.length() > 50 ? text.substring(0, 50) + "..." : text));
                 updateText(lectureTextProperty, text);
                 maybeSaveRecording(pcm, text);
                 handleAiAnswer(text);
@@ -337,7 +429,8 @@ public class ClassSessionManager {
         if (!aiTokenWarned.compareAndSet(false, true)) {
             return;
         }
-        notificationService.showWarning("未配置 API Key", "请在设置中填写 AI 平台的 Token / API Key");
+        Runnable action = openSettingsCallback;
+        notificationService.showWarning("未配置 API Key", "请在设置中填写 AI 平台的 Token / API Key (点击跳转)", action);
         updateText(hintTextProperty, "未配置 API Key，请打开设置填写");
     }
 }

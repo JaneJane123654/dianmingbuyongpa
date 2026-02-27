@@ -11,32 +11,94 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 模型下载器（支持断点续传）
+ * 模型下载器 (Model Downloader)
  *
- * <p>下载目标通常体积较大，需使用临时文件与 Range 续传，下载完成后进行完整性校验并原子移动。
+ * <p>负责从远程 URL 下载大型模型文件。
+ * 支持以下特性：
+ * <ul>
+ *   <li>断点续传：使用 HTTP Range 请求从上次中断的地方继续下载。</li>
+ *   <li>下载进度监听：通过 {@link DownloadListener} 实时回调下载进度。</li>
+ *   <li>完整性校验：下载完成后自动校验文件大小和 MD5 哈希值。</li>
+ *   <li>原子移动：下载完成后将临时文件原子重命名为目标文件名，确保文件可用性。</li>
+ *   <li>可取消：支持通过 {@link #cancel()} 方法中断下载。</li>
+ * </ul>
+ *
+ * @author Code Assistant
+ * @date 2026-01-31
  */
 public class ModelDownloader {
 
     private static final Logger logger = LoggerFactory.getLogger(ModelDownloader.class);
 
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+    /**
+     * 下载进度与状态监听器
+     */
     public interface DownloadListener {
+        /**
+         * 下载进度回调
+         *
+         * @param name            模型名称
+         * @param downloadedBytes 已下载字节数
+         * @param totalBytes      总字节数
+         */
         void onProgress(String name, long downloadedBytes, long totalBytes);
 
+        /**
+         * 下载完成回调
+         *
+         * @param name       模型名称
+         * @param targetPath 最终存储路径
+         */
         void onFinished(String name, Path targetPath);
 
+        /**
+         * 下载错误回调
+         *
+         * @param name  模型名称
+         * @param error 错误详情描述
+         */
         void onError(String name, String error);
     }
 
     private final HttpClient httpClient;
 
+    /**
+     * 初始化下载器
+     */
     public ModelDownloader() {
-        this.httpClient = HttpClient.newHttpClient();
+        this.httpClient = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
     }
 
+    /**
+     * 取消当前下载任务
+     */
+    public void cancel() {
+        cancelled.set(true);
+    }
+
+    /**
+     * 重置取消状态（用于开始新下载）
+     */
+    public void reset() {
+        cancelled.set(false);
+    }
+
+    /**
+     * 启动异步下载任务
+     *
+     * @param descriptor 模型描述信息
+     * @param listener   状态监听器
+     * @throws NullPointerException 如果参数为 null
+     */
     public void download(ModelDescriptor descriptor, DownloadListener listener) {
         Objects.requireNonNull(descriptor);
         Objects.requireNonNull(listener);
@@ -69,6 +131,10 @@ public class ModelDownloader {
                 long downloaded = existing;
                 int read;
                 while ((read = inputStream.read(buffer)) != -1) {
+                    if (cancelled.get()) {
+                        listener.onError(descriptor.name(), "下载已取消");
+                        return;
+                    }
                     outputStream.write(buffer, 0, read);
                     downloaded += read;
                     listener.onProgress(descriptor.name(), downloaded, totalBytes);
@@ -133,4 +199,3 @@ public class ModelDownloader {
         }
     }
 }
-

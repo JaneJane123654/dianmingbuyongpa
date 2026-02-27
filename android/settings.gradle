@@ -1,0 +1,21 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        mavenLocal() 
+        // 指定自定义 Maven 本地仓库路径，确保 Gradle 能找到 core 模块
+        maven { url 'file:///D:/develop/apache-maven-3.9.4/mvn_repo' }
+    }
+}
+
+rootProject.name = "ClassroomAssistant"
+include ':app'

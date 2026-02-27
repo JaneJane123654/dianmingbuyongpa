@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.classroomassistant.android.app-mergeDebugResources-65:/values-watch-v21/values-watch-v21.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\jane\\.gradle\\caches\\transforms-3\\b0cc7e1acbcbcd9dcbd77e2524f836bc\\transformed\\appcompat-1.6.1\\res\\values-watch-v21\\values-watch-v21.xml",
+                    "from": {
+                        "startLines": "2,6,10",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,271,499",
+                        "endLines": "5,9,13",
+                        "endColumns": "12,12,12",
+                        "endOffsets": "266,494,724"
+                    }
+                }
+            ]
+        }
+    ]
+}

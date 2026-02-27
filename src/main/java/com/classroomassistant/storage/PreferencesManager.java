@@ -17,9 +17,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 用户配置管理器（Java Preferences）
+ * 用户配置管理器 (Preferences Manager)
  *
- * <p>用于存储与读取用户配置；敏感信息（Token）采用 AES-GCM 加密保存。
+ * <p>基于 Java Preferences API 实现用户个性化设置的持久化存储。
+ * 核心功能包括配置项的加载、保存，以及对敏感信息（如 AI API Token）的 AES-GCM 加密保护。
+ *
+ * @author Code Assistant
+ * @date 2026-01-31
  */
 public class PreferencesManager {
 
@@ -36,16 +40,25 @@ public class PreferencesManager {
     private static final String KEY_AI_TOKEN_ENCRYPTED = "ai.token.encrypted";
     private static final String KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled";
     private static final String KEY_RECORDING_RETENTION_DAYS = "recording.retentionDays";
+    private static final String KEY_SPEECH_API_KEY_ENCRYPTED = "speech.apiKey.encrypted";
 
     private static final String KEY_CRYPTO_SALT = "crypto.salt";
 
     private final Preferences preferences;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * 初始化配置管理器，绑定到指定的用户节点
+     */
     public PreferencesManager() {
         this.preferences = Preferences.userRoot().node(NODE_NAME);
     }
 
+    /**
+     * 从持久化存储中加载所有用户偏好设置
+     *
+     * @return 包含所有设置项的 {@link UserPreferences} 对象
+     */
     public UserPreferences load() {
         String keywords = preferences.get(KEY_KEYWORDS, "");
         int lookbackSeconds = preferences.getInt(KEY_AUDIO_LOOKBACK_SECONDS, 240);
@@ -76,9 +89,15 @@ public class PreferencesManager {
                 .recordingSaveEnabled(recordingSaveEnabled)
                 .recordingRetentionDays(recordingRetentionDays)
             .aiTokenPlainText("")
+            .speechApiKey("")
             .build();
     }
 
+    /**
+     * 将当前用户偏好设置保存到持久化存储中
+     *
+     * @param prefs 包含要保存设置的 {@link UserPreferences} 对象
+     */
     public void save(UserPreferences prefs) {
         preferences.put(KEY_KEYWORDS, Validator.normalizeKeywords(prefs.getKeywords()));
         preferences.putInt(KEY_AUDIO_LOOKBACK_SECONDS, prefs.getAudioLookbackSeconds());
@@ -94,8 +113,19 @@ public class PreferencesManager {
             String encrypted = encryptToken(token);
             preferences.put(KEY_AI_TOKEN_ENCRYPTED, encrypted);
         }
+
+        String speechKey = prefs.getSpeechApiKey();
+        if (speechKey != null && !speechKey.isBlank()) {
+            String encrypted = encryptToken(speechKey);
+            preferences.put(KEY_SPEECH_API_KEY_ENCRYPTED, encrypted);
+        }
     }
 
+    /**
+     * 读取并解密 AI 服务的 API Token
+     *
+     * @return 解密后的 Token 明文。如果不存在或解密失败，则返回空字符串。
+     */
     public String loadAiTokenPlainText() {
         String encrypted = preferences.get(KEY_AI_TOKEN_ENCRYPTED, "");
         if (encrypted == null || encrypted.isBlank()) {
@@ -105,6 +135,24 @@ public class PreferencesManager {
             return decryptToken(encrypted);
         } catch (Exception e) {
             logger.warn("解密 Token 失败: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * 读取并解密语音识别 API Key
+     *
+     * @return 解密后的 Key 明文。如果不存在或解密失败，则返回空字符串。
+     */
+    public String loadSpeechApiKey() {
+        String encrypted = preferences.get(KEY_SPEECH_API_KEY_ENCRYPTED, "");
+        if (encrypted == null || encrypted.isBlank()) {
+            return "";
+        }
+        try {
+            return decryptToken(encrypted);
+        } catch (Exception e) {
+            logger.warn("解密 Speech API Key 失败: {}", e.getMessage());
             return "";
         }
     }
