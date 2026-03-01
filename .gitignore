@@ -1,0 +1,18 @@
+# 忽略构建输出和临时文件
+/build/
+/android/app/build/
+/android/build/
+/core/target/
+/desktop/target/
+/target/
+*.class
+*.apk
+*.jar
+*.log
+*.tmp
+*.exit
+*.bat
+*.sh
+.idea/
+.gradle/
+/local.properties
