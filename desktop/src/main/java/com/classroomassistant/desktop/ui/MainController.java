@@ -5,12 +5,18 @@ import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
@@ -177,12 +183,43 @@ public class MainController {
 
     /**
      * "设置"按钮点击事件
+     * <p>打开设置窗口（模态对话框），使用 DesktopSettingsController 管理设置。
      */
     @FXML
     private void openSettings() {
-        // TODO: 打开设置窗口
         appendLog("打开设置页面");
-        platformProvider.showToast("设置功能即将上线");
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/SettingsView.fxml"));
+            loader.setControllerFactory(clazz -> {
+                if (clazz == DesktopSettingsController.class) {
+                    return new DesktopSettingsController(platformProvider);
+                }
+                try {
+                    return clazz.getDeclaredConstructor().newInstance();
+                } catch (Exception e) {
+                    throw new IllegalStateException("创建控制器失败: " + clazz.getName(), e);
+                }
+            });
+
+            Parent root = loader.load();
+            Stage settingsStage = new Stage();
+            settingsStage.setTitle("设置");
+            settingsStage.initModality(Modality.APPLICATION_MODAL);
+            settingsStage.initOwner(settingsButton.getScene().getWindow());
+
+            Scene scene = new Scene(root, 700, 680);
+            // 复用主窗口的样式表
+            scene.getStylesheets().addAll(settingsButton.getScene().getStylesheets());
+            settingsStage.setScene(scene);
+            settingsStage.setMinWidth(600);
+            settingsStage.setMinHeight(500);
+            settingsStage.showAndWait();
+
+            appendLog("设置窗口已关闭");
+        } catch (IOException e) {
+            logger.error("打开设置窗口失败", e);
+            platformProvider.showToast("打开设置失败: " + e.getMessage());
+        }
     }
 
     /**

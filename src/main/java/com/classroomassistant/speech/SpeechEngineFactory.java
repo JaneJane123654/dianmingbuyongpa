@@ -3,6 +3,7 @@ package com.classroomassistant.speech;
 import com.classroomassistant.storage.ConfigManager;
 import com.classroomassistant.storage.ModelRepository;
 import com.classroomassistant.storage.PreferencesManager;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -126,13 +127,20 @@ public class SpeechEngineFactory {
      * 创建并初始化基于 Sherpa-ONNX 的真实语音服务
      */
     private SpeechServices createSherpaServices() {
-        if (!modelRepository.checkRequiredModels(true).ready()) {
+        String currentKwsModelId = "";
+        if (preferencesManager != null) {
+            currentKwsModelId = preferencesManager.load().getCurrentKwsModelId();
+        }
+        boolean kwsReady = modelRepository.isKwsModelReady(currentKwsModelId);
+        boolean asrReady = Files.isDirectory(modelRepository.getAsrModelDir());
+        boolean vadReady = Files.exists(modelRepository.getVadModelFile());
+        if (!kwsReady || !asrReady || !vadReady) {
             throw new IllegalStateException("缺少 Sherpa 模型文件");
         }
         SherpaWakeWordDetector wakeWordDetector = new SherpaWakeWordDetector();
         SherpaSilenceDetector silenceDetector = new SherpaSilenceDetector();
         SherpaSpeechRecognizer speechRecognizer = new SherpaSpeechRecognizer();
-        wakeWordDetector.initialize(modelRepository.getKwsModelDir(), "");
+        wakeWordDetector.initialize(modelRepository.getKwsModelDir(currentKwsModelId), "");
         silenceDetector.initialize(modelRepository.getVadModelFile());
         speechRecognizer.initialize(modelRepository.getAsrModelDir());
         return new SpeechServices(wakeWordDetector, silenceDetector, speechRecognizer);

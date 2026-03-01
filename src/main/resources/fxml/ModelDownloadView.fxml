@@ -8,7 +8,10 @@
             fx:controller="com.classroomassistant.ui.ModelDownloadController"
             prefWidth="500" prefHeight="400">
     <top>
-        <HBox spacing="10" padding="12" alignment="CENTER_LEFT">
+        <HBox spacing="10" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <Label text="模型下载" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="totalStatusLabel" text="" styleClass="info-label"/>
@@ -16,7 +19,10 @@
     </top>
 
     <center>
-        <VBox spacing="12" padding="12">
+        <VBox spacing="12">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <!-- 说明面板 -->
             <VBox spacing="8" styleClass="status-panel">
                 <Label text="需要下载的模型" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
@@ -53,7 +59,10 @@
     </center>
 
     <bottom>
-        <HBox spacing="10" padding="12" alignment="CENTER_RIGHT">
+        <HBox spacing="10" alignment="CENTER_RIGHT">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <Label fx:id="errorLabel" text="" styleClass="error-label" HBox.hgrow="ALWAYS"/>
             <Button fx:id="startButton" text="开始下载" styleClass="primary-button" onAction="#startDownload"/>
             <Button fx:id="cancelButton" text="取消" styleClass="secondary-button" onAction="#cancel" disable="true"/>

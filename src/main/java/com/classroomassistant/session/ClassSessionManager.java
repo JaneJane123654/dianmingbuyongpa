@@ -170,7 +170,10 @@ public class ClassSessionManager {
         Validator.requireRange(prefs.getAudioLookbackSeconds(), 1, 300, "回溯秒数");
         this.currentPreferences = prefs;
         recordingRepository.cleanupOldRecordings(prefs.getRecordingRetentionDays());
-        speechServices.getWakeWordDetector().initialize(modelRepository.getKwsModelDir(), prefs.getKeywords());
+        speechServices.getWakeWordDetector().initialize(
+            modelRepository.getKwsModelDir(prefs.getCurrentKwsModelId()),
+            prefs.getKeywords()
+        );
         speechServices.getSilenceDetector().initialize(modelRepository.getVadModelFile());
         speechServices.getSilenceDetector().setQuietThresholdSeconds(prefs.getVadQuietThresholdSeconds());
         speechServices.getSpeechRecognizer().initialize(modelRepository.getAsrModelDir());
@@ -250,7 +253,8 @@ public class ClassSessionManager {
 
     private void checkModelsOnStartup() {
         boolean requireSherpa = !"FAKE".equalsIgnoreCase(configManager.getSpeechEngineDefault());
-        ModelCheckResult result = modelRepository.checkRequiredModels(requireSherpa);
+        String currentModel = currentPreferences == null ? "" : currentPreferences.getCurrentKwsModelId();
+        ModelCheckResult result = modelRepository.checkRequiredModels(requireSherpa, currentModel);
         if (!result.ready()) {
             String message = "缺少模型: " + String.join("; ", result.missingItems());
             updateText(hintTextProperty, message);

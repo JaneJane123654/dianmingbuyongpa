@@ -2,7 +2,6 @@
 <resources>
     <style name="Theme.ClassroomAssistant" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
-        <item name="colorPrimaryVariant">@color/primary_dark</item>
         <item name="colorOnPrimary">@android:color/white</item>
         <item name="colorSecondary">@color/accent</item>
         <item name="colorOnSecondary">@android:color/white</item>

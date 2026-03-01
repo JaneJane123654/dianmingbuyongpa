@@ -1,12 +1,10 @@
 package com.classroomassistant.speech;
 
-import java.nio.file.Path;
-
 public class SherpaOnnxJNI {
     private static final String[] LIB_NAMES = {
-        "sherpa-onnx-jni",
-        "sherpa-onnx-jni-android",
-        "sherpa-onnx"
+            "sherpa-onnx-jni",
+            "sherpa-onnx-jni-android",
+            "sherpa-onnx"
     };
 
     private static volatile boolean loaded;
@@ -36,7 +34,7 @@ public class SherpaOnnxJNI {
         }
     }
 
-    public native long initializeKws(Path modelDir, String keywords);
+    public native long initializeKws(String modelDir, String keywords);
 
     public native boolean detectWakeWord(long handle, float[] audioData, int numSamples);
 

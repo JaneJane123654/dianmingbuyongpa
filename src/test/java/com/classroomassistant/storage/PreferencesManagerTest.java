@@ -1,6 +1,7 @@
 package com.classroomassistant.storage;
 
 import com.classroomassistant.ai.LLMConfig;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,10 @@ class PreferencesManagerTest {
             .aiModelName("gpt-4")
             .aiTokenPlainText("test-token")
             .speechApiKey("speech-key")
+            .selectedKwsModelIds(Set.of("model-a", "model-b"))
+            .currentKwsModelId("model-b")
+            .asrModelSelected(false)
+            .vadModelSelected(true)
             .build();
 
         preferencesManager.save(toSave);
@@ -59,6 +64,10 @@ class PreferencesManagerTest {
         assertEquals(14, loaded.getRecordingRetentionDays());
         assertEquals(LLMConfig.ModelType.OPENAI, loaded.getAiModelType());
         assertEquals("gpt-4", loaded.getAiModelName());
+        assertEquals(Set.of("model-a", "model-b"), loaded.getSelectedKwsModelIds());
+        assertEquals("model-b", loaded.getCurrentKwsModelId());
+        assertFalse(loaded.isAsrModelSelected());
+        assertTrue(loaded.isVadModelSelected());
     }
 
     @Test

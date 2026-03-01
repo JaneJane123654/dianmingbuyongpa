@@ -5,7 +5,10 @@ import com.classroomassistant.utils.Validator;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.prefs.Preferences;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -32,15 +35,36 @@ public class PreferencesManager {
     private static final String NODE_NAME = "com.classroomassistant";
 
     private static final String KEY_KEYWORDS = "user.keywords";
+    private static final String KEY_KWS_TRIGGER_THRESHOLD = "speech.kws.triggerThreshold";
     private static final String KEY_AUDIO_LOOKBACK_SECONDS = "audio.lookbackSeconds";
     private static final String KEY_VAD_ENABLED = "vad.enabled";
     private static final String KEY_VAD_QUIET_THRESHOLD_SECONDS = "vad.quietThresholdSeconds";
+    private static final String KEY_VAD_QUIET_ALERT_MODE = "vad.quietAlertMode";
+    private static final String KEY_VAD_QUIET_AUTO_LOOKBACK_ENABLED = "vad.quietAutoLookbackEnabled";
+    private static final String KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS = "vad.quietAutoLookbackExtraSeconds";
     private static final String KEY_AI_PROVIDER = "ai.provider";
     private static final String KEY_AI_MODEL_NAME = "ai.modelName";
     private static final String KEY_AI_TOKEN_ENCRYPTED = "ai.token.encrypted";
+    private static final String KEY_AI_SECRET_ENCRYPTED = "ai.secret.encrypted";
     private static final String KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled";
     private static final String KEY_RECORDING_RETENTION_DAYS = "recording.retentionDays";
     private static final String KEY_SPEECH_API_KEY_ENCRYPTED = "speech.apiKey.encrypted";
+    private static final String KEY_ASR_LOCAL_ENABLED = "speech.asr.local.enabled";
+    private static final String KEY_ASR_LOCAL_MODEL_ID = "speech.asr.local.model.id";
+    private static final String KEY_ASR_CLOUD_WHISPER_ENABLED = "speech.asr.cloud.whisper.enabled";
+    private static final String KEY_KWS_SELECTED_MODELS = "kws.selectedModels";
+    private static final String KEY_KWS_CURRENT_MODEL = "kws.currentModel";
+    private static final String KEY_ASR_SELECTED = "asr.selected";
+    private static final String KEY_VAD_SELECTED = "vad.selected";
+    private static final String KEY_WAKE_ALERT_MODE = "speech.kws.wakeAlertMode";
+    private static final String KEY_LOG_MODE = "developer.log.mode";
+    private static final String KEY_LOG_SHOW_DIAGNOSTIC = "developer.log.showDiagnostic";
+    private static final String KEY_LOG_SHOW_AUDIO_DEVICE = "developer.log.showAudioDevice";
+    private static final String KEY_LOG_SHOW_GAIN_ACTIVITY = "developer.log.showGainActivity";
+    private static final String KEY_LOG_SHOW_TTS_SELF_TEST = "developer.log.showTtsSelfTest";
+    private static final String KEY_LOG_SHOW_HEARTBEAT = "developer.log.showHeartbeat";
+    private static final String KEY_TTS_SELF_TEST_ENABLED = "developer.tts.selfTest.enabled";
+    private static final String KEY_BACKGROUND_KEEPALIVE_ENABLED = "listening.backgroundKeepAliveEnabled";
 
     private static final String KEY_CRYPTO_SALT = "crypto.salt";
 
@@ -61,11 +85,21 @@ public class PreferencesManager {
      */
     public UserPreferences load() {
         String keywords = preferences.get(KEY_KEYWORDS, "");
-        int lookbackSeconds = preferences.getInt(KEY_AUDIO_LOOKBACK_SECONDS, 240);
+        float kwsThreshold = (preferences.getInt(KEY_KWS_TRIGGER_THRESHOLD, 25) / 100f);
+        kwsThreshold = Math.max(0.05f, Math.min(0.8f, kwsThreshold));
+        int lookbackSeconds = preferences.getInt(KEY_AUDIO_LOOKBACK_SECONDS, 15);
+        lookbackSeconds = Math.max(8, Math.min(120, lookbackSeconds));
         boolean vadEnabled = preferences.getBoolean(KEY_VAD_ENABLED, true);
         int quietThresholdSeconds = preferences.getInt(KEY_VAD_QUIET_THRESHOLD_SECONDS, 5);
+        quietThresholdSeconds = Math.max(3, Math.min(30, quietThresholdSeconds));
+        String quietAlertModeRaw = preferences.get(KEY_VAD_QUIET_ALERT_MODE, "NOTIFICATION_ONLY");
+        String quietAlertMode = "SOUND".equals(quietAlertModeRaw) ? "SOUND" : "NOTIFICATION_ONLY";
+        boolean quietAutoLookbackEnabled = preferences.getBoolean(KEY_VAD_QUIET_AUTO_LOOKBACK_ENABLED, true);
+        int quietAutoLookbackExtraSeconds = preferences.getInt(KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS, 8);
+        quietAutoLookbackExtraSeconds = Math.max(1, Math.min(60, quietAutoLookbackExtraSeconds));
         boolean recordingSaveEnabled = preferences.getBoolean(KEY_RECORDING_SAVE_ENABLED, false);
         int recordingRetentionDays = preferences.getInt(KEY_RECORDING_RETENTION_DAYS, 7);
+        recordingRetentionDays = Math.max(0, Math.min(30, recordingRetentionDays));
 
         LLMConfig.ModelType modelType;
         try {
@@ -74,22 +108,57 @@ public class PreferencesManager {
             modelType = LLMConfig.ModelType.QIANFAN;
         }
         String modelName = preferences.get(KEY_AI_MODEL_NAME, "");
-
-        Validator.requireRange(lookbackSeconds, 1, 300, "回溯秒数");
-        Validator.requireRange(quietThresholdSeconds, 3, 30, "安静阈值（秒）");
-        Validator.requireRange(recordingRetentionDays, 0, 30, "录音保留天数");
+        boolean localAsrEnabled = preferences.getBoolean(KEY_ASR_LOCAL_ENABLED, true);
+        String localAsrModelId = preferences.get(KEY_ASR_LOCAL_MODEL_ID, "");
+        boolean cloudWhisperEnabled = preferences.getBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, false);
+        Set<String> selectedKwsModels = parseModelIds(preferences.get(KEY_KWS_SELECTED_MODELS, ""));
+        String currentKwsModel = preferences.get(KEY_KWS_CURRENT_MODEL, "");
+        boolean asrSelected = preferences.getBoolean(KEY_ASR_SELECTED, true);
+        boolean vadSelected = preferences.getBoolean(KEY_VAD_SELECTED, true);
+        String wakeAlertModeRaw = preferences.get(KEY_WAKE_ALERT_MODE, "NOTIFICATION_ONLY");
+        String wakeAlertMode = "SOUND".equals(wakeAlertModeRaw) ? "SOUND" : "NOTIFICATION_ONLY";
+        String logModeRaw = preferences.get(KEY_LOG_MODE, "SIMPLE");
+        String logMode = "FULL".equals(logModeRaw) ? "FULL" : "SIMPLE";
+        boolean showDiagnosticLogs = preferences.getBoolean(KEY_LOG_SHOW_DIAGNOSTIC, false);
+        boolean showAudioDeviceLogs = preferences.getBoolean(KEY_LOG_SHOW_AUDIO_DEVICE, false);
+        boolean showGainActivityLogs = preferences.getBoolean(KEY_LOG_SHOW_GAIN_ACTIVITY, false);
+        boolean showTtsSelfTestLogs = preferences.getBoolean(KEY_LOG_SHOW_TTS_SELF_TEST, false);
+        boolean showHeartbeatLogs = preferences.getBoolean(KEY_LOG_SHOW_HEARTBEAT, false);
+        boolean ttsSelfTestEnabled = preferences.getBoolean(KEY_TTS_SELF_TEST_ENABLED, false);
+        boolean backgroundKeepAliveEnabled = preferences.getBoolean(KEY_BACKGROUND_KEEPALIVE_ENABLED, true);
 
         return UserPreferences.builder()
             .keywords(Validator.normalizeKeywords(keywords))
+            .kwsThreshold(kwsThreshold)
             .audioLookbackSeconds(lookbackSeconds)
             .vadEnabled(vadEnabled)
             .vadQuietThresholdSeconds(quietThresholdSeconds)
+            .quietAlertMode(quietAlertMode)
+            .quietAutoLookbackEnabled(quietAutoLookbackEnabled)
+            .quietAutoLookbackExtraSeconds(quietAutoLookbackExtraSeconds)
             .aiModelType(modelType)
             .aiModelName(modelName)
-                .recordingSaveEnabled(recordingSaveEnabled)
-                .recordingRetentionDays(recordingRetentionDays)
+            .recordingSaveEnabled(recordingSaveEnabled)
+            .recordingRetentionDays(recordingRetentionDays)
             .aiTokenPlainText("")
+            .aiSecretKey("")
             .speechApiKey("")
+            .localAsrEnabled(localAsrEnabled)
+            .localAsrModelId(localAsrModelId)
+            .cloudWhisperEnabled(cloudWhisperEnabled)
+            .selectedKwsModelIds(selectedKwsModels)
+            .currentKwsModelId(currentKwsModel)
+            .asrModelSelected(asrSelected)
+            .vadModelSelected(vadSelected)
+            .wakeAlertMode(wakeAlertMode)
+            .logMode(logMode)
+            .showDiagnosticLogs(showDiagnosticLogs)
+            .showAudioDeviceLogs(showAudioDeviceLogs)
+            .showGainActivityLogs(showGainActivityLogs)
+            .showTtsSelfTestLogs(showTtsSelfTestLogs)
+            .showHeartbeatLogs(showHeartbeatLogs)
+            .ttsSelfTestEnabled(ttsSelfTestEnabled)
+            .backgroundKeepAliveEnabled(backgroundKeepAliveEnabled)
             .build();
     }
 
@@ -100,13 +169,35 @@ public class PreferencesManager {
      */
     public void save(UserPreferences prefs) {
         preferences.put(KEY_KEYWORDS, Validator.normalizeKeywords(prefs.getKeywords()));
+        int kwsThresholdPercent = (int) (Math.max(0.05f, Math.min(0.8f, prefs.getKwsThreshold())) * 100f);
+        preferences.putInt(KEY_KWS_TRIGGER_THRESHOLD, kwsThresholdPercent);
         preferences.putInt(KEY_AUDIO_LOOKBACK_SECONDS, prefs.getAudioLookbackSeconds());
         preferences.putBoolean(KEY_VAD_ENABLED, prefs.isVadEnabled());
         preferences.putInt(KEY_VAD_QUIET_THRESHOLD_SECONDS, prefs.getVadQuietThresholdSeconds());
+        preferences.put(KEY_VAD_QUIET_ALERT_MODE, "SOUND".equals(prefs.getQuietAlertMode()) ? "SOUND" : "NOTIFICATION_ONLY");
+        preferences.putBoolean(KEY_VAD_QUIET_AUTO_LOOKBACK_ENABLED, prefs.isQuietAutoLookbackEnabled());
+        preferences.putInt(KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS,
+            Math.max(1, Math.min(60, prefs.getQuietAutoLookbackExtraSeconds())));
         preferences.put(KEY_AI_PROVIDER, prefs.getAiModelType().name());
         preferences.put(KEY_AI_MODEL_NAME, prefs.getAiModelName());
         preferences.putBoolean(KEY_RECORDING_SAVE_ENABLED, prefs.isRecordingSaveEnabled());
         preferences.putInt(KEY_RECORDING_RETENTION_DAYS, prefs.getRecordingRetentionDays());
+        preferences.putBoolean(KEY_ASR_LOCAL_ENABLED, prefs.isLocalAsrEnabled());
+        preferences.put(KEY_ASR_LOCAL_MODEL_ID, prefs.getLocalAsrModelId());
+        preferences.putBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, prefs.isCloudWhisperEnabled());
+        preferences.put(KEY_KWS_SELECTED_MODELS, joinModelIds(prefs.getSelectedKwsModelIds()));
+        preferences.put(KEY_KWS_CURRENT_MODEL, prefs.getCurrentKwsModelId());
+        preferences.putBoolean(KEY_ASR_SELECTED, prefs.isAsrModelSelected());
+        preferences.putBoolean(KEY_VAD_SELECTED, prefs.isVadModelSelected());
+        preferences.put(KEY_WAKE_ALERT_MODE, "SOUND".equals(prefs.getWakeAlertMode()) ? "SOUND" : "NOTIFICATION_ONLY");
+        preferences.put(KEY_LOG_MODE, "FULL".equals(prefs.getLogMode()) ? "FULL" : "SIMPLE");
+        preferences.putBoolean(KEY_LOG_SHOW_DIAGNOSTIC, prefs.isShowDiagnosticLogs());
+        preferences.putBoolean(KEY_LOG_SHOW_AUDIO_DEVICE, prefs.isShowAudioDeviceLogs());
+        preferences.putBoolean(KEY_LOG_SHOW_GAIN_ACTIVITY, prefs.isShowGainActivityLogs());
+        preferences.putBoolean(KEY_LOG_SHOW_TTS_SELF_TEST, prefs.isShowTtsSelfTestLogs());
+        preferences.putBoolean(KEY_LOG_SHOW_HEARTBEAT, prefs.isShowHeartbeatLogs());
+        preferences.putBoolean(KEY_TTS_SELF_TEST_ENABLED, prefs.isTtsSelfTestEnabled());
+        preferences.putBoolean(KEY_BACKGROUND_KEEPALIVE_ENABLED, prefs.isBackgroundKeepAliveEnabled());
 
         String token = prefs.getAiTokenPlainText();
         if (token != null && !token.isBlank()) {
@@ -114,11 +205,46 @@ public class PreferencesManager {
             preferences.put(KEY_AI_TOKEN_ENCRYPTED, encrypted);
         }
 
+        String secretKey = prefs.getAiSecretKey();
+        if (secretKey != null && !secretKey.isBlank()) {
+            String encrypted = encryptToken(secretKey);
+            preferences.put(KEY_AI_SECRET_ENCRYPTED, encrypted);
+        }
+
         String speechKey = prefs.getSpeechApiKey();
         if (speechKey != null && !speechKey.isBlank()) {
             String encrypted = encryptToken(speechKey);
             preferences.put(KEY_SPEECH_API_KEY_ENCRYPTED, encrypted);
         }
+    }
+
+    private Set<String> parseModelIds(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Set.of();
+        }
+        Set<String> result = new LinkedHashSet<>();
+        Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .forEach(result::add);
+        return result;
+    }
+
+    private String joinModelIds(Set<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String id : ids) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append(',');
+            }
+            builder.append(id.trim());
+        }
+        return builder.toString();
     }
 
     /**
@@ -153,6 +279,24 @@ public class PreferencesManager {
             return decryptToken(encrypted);
         } catch (Exception e) {
             logger.warn("解密 Speech API Key 失败: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * 读取并解密 AI 平台 Secret Key（如千帆双密钥）
+     *
+     * @return 解密后的 Secret Key 明文。如果不存在或解密失败，则返回空字符串。
+     */
+    public String loadAiSecretKey() {
+        String encrypted = preferences.get(KEY_AI_SECRET_ENCRYPTED, "");
+        if (encrypted == null || encrypted.isBlank()) {
+            return "";
+        }
+        try {
+            return decryptToken(encrypted);
+        } catch (Exception e) {
+            logger.warn("解密 Secret Key 失败: {}", e.getMessage());
             return "";
         }
     }
@@ -217,4 +361,3 @@ public class PreferencesManager {
         return salt;
     }
 }
-

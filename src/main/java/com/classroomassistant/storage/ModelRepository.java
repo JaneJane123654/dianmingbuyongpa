@@ -18,6 +18,13 @@ import java.util.Objects;
  */
 public class ModelRepository {
 
+    private static final List<String> KWS_REQUIRED_FILES = List.of(
+        "encoder.onnx",
+        "decoder.onnx",
+        "joiner.onnx",
+        "tokens.txt"
+    );
+
     private final AppPaths appPaths;
     private final ConfigManager configManager;
 
@@ -43,12 +50,34 @@ public class ModelRepository {
     }
 
     /**
+     * 获取唤醒词 (KWS) 模型根目录
+     *
+     * @return KWS 模型根目录的绝对路径
+     */
+    public Path getKwsModelsRootDir() {
+        return getModelsDir().resolve("sherpa-onnx-kws");
+    }
+
+    /**
      * 获取唤醒词 (KWS) 模型目录
+     *
+     * @param modelId KWS 模型标识
+     * @return KWS 模型目录的绝对路径
+     */
+    public Path getKwsModelDir(String modelId) {
+        String resolved = modelId == null || modelId.isBlank()
+            ? configManager.getKwsModelName()
+            : modelId.trim();
+        return getKwsModelsRootDir().resolve(resolved);
+    }
+
+    /**
+     * 获取唤醒词 (KWS) 模型目录（默认模型）
      *
      * @return KWS 模型目录的绝对路径
      */
     public Path getKwsModelDir() {
-        return getModelsDir().resolve("sherpa-onnx-kws");
+        return getKwsModelDir(configManager.getKwsModelName());
     }
 
     /**
@@ -69,6 +98,33 @@ public class ModelRepository {
         return getModelsDir().resolve("sherpa-onnx-vad").resolve("silero_vad.onnx");
     }
 
+    public boolean isKwsModelReady(String modelId) {
+        return getMissingKwsFiles(modelId).isEmpty();
+    }
+
+    public boolean isAsrModelReady() {
+        Path asrDir = getAsrModelDir();
+        return Files.isDirectory(asrDir) && Files.exists(asrDir.resolve("tokens.txt"));
+    }
+
+    public boolean isVadModelReady() {
+        return Files.exists(getVadModelFile());
+    }
+
+    public List<String> getMissingKwsFiles(String modelId) {
+        Path modelDir = getKwsModelDir(modelId);
+        if (!Files.isDirectory(modelDir)) {
+            return new ArrayList<>(KWS_REQUIRED_FILES);
+        }
+        List<String> missing = new ArrayList<>();
+        for (String file : KWS_REQUIRED_FILES) {
+            if (!Files.exists(modelDir.resolve(file))) {
+                missing.add(file);
+            }
+        }
+        return missing;
+    }
+
     /**
      * 检查核心模型文件是否存在
      *
@@ -76,21 +132,27 @@ public class ModelRepository {
      * @return {@link ModelCheckResult} 包含检查结果和缺失项列表
      */
     public ModelCheckResult checkRequiredModels(boolean requireSherpaModels) {
+        return checkRequiredModels(requireSherpaModels, configManager.getKwsModelName());
+    }
+
+    public ModelCheckResult checkRequiredModels(boolean requireSherpaModels, String kwsModelId) {
         if (!requireSherpaModels) {
             return new ModelCheckResult(true, List.of());
         }
 
+        String resolved = kwsModelId == null || kwsModelId.isBlank()
+            ? configManager.getKwsModelName()
+            : kwsModelId.trim();
         List<String> missing = new ArrayList<>();
-        if (!Files.isDirectory(getKwsModelDir())) {
-            missing.add("KWS 模型目录: " + getKwsModelDir());
+        if (!isKwsModelReady(resolved)) {
+            missing.add("KWS 模型文件: " + getKwsModelDir(resolved));
         }
-        if (!Files.isDirectory(getAsrModelDir())) {
+        if (!isAsrModelReady()) {
             missing.add("ASR 模型目录: " + getAsrModelDir());
         }
-        if (!Files.exists(getVadModelFile())) {
+        if (!isVadModelReady()) {
             missing.add("VAD 模型文件: " + getVadModelFile());
         }
         return new ModelCheckResult(missing.isEmpty(), missing);
     }
 }
-

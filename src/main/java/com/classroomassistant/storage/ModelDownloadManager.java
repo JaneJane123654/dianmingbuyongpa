@@ -46,6 +46,23 @@ public class ModelDownloadManager implements AutoCloseable {
     private final ModelRepository modelRepository;
     private final ModelDownloader downloader;
     private final ConfigManager configManager;
+    private final List<KwsModelOption> kwsModelOptions = List.of(
+        new KwsModelOption(
+            "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01",
+            "Zipformer WenetSpeech 3.3M (2024-01-01)",
+            "中文唤醒模型，覆盖常见课堂场景，体积适中"
+        ),
+        new KwsModelOption(
+            "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
+            "Zipformer GigaSpeech 3.3M (2024-01-01)",
+            "英语为主的唤醒模型，适合英文课堂或双语环境"
+        ),
+        new KwsModelOption(
+            "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20",
+            "Zipformer 中英 3M (2025-12-20)",
+            "中英双语唤醒模型，优先推荐给混合语言场景"
+        )
+    );
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "model-download");
@@ -88,7 +105,8 @@ public class ModelDownloadManager implements AutoCloseable {
                 "KWS 唤醒词模型",
                 URI.create(baseUrl + "/kws-models/" + kwsModel + ".tar.bz2"),
                 configManager.getCacheDir().resolve(kwsModel + ".tar.bz2"),
-                null, null
+                null, null,
+                modelRepository.getKwsModelDir(kwsModel)
             ));
         }
 
@@ -100,7 +118,8 @@ public class ModelDownloadManager implements AutoCloseable {
                 "ASR 语音识别模型",
                 URI.create(baseUrl + "/asr-models/" + asrModel + ".tar.bz2"),
                 configManager.getCacheDir().resolve(asrModel + ".tar.bz2"),
-                null, null
+                null, null,
+                modelRepository.getAsrModelDir()
             ));
         }
 
@@ -134,6 +153,7 @@ public class ModelDownloadManager implements AutoCloseable {
         }
 
         executor.submit(() -> {
+            downloader.reset();
             Platform.runLater(() -> downloadingProperty.set(true));
             boolean allSuccess = true;
             StringBuilder errorMsg = new StringBuilder();
@@ -237,7 +257,10 @@ public class ModelDownloadManager implements AutoCloseable {
         if (!url.endsWith(".tar.bz2") && !url.endsWith(".tar.gz") && !url.endsWith(".tgz")) {
             return;
         }
-        Path extractDir = resolveExtractDir(model);
+        Path extractDir = model.extractDir();
+        if (extractDir == null) {
+            extractDir = resolveExtractDir(model);
+        }
         if (extractDir == null) {
             return;
         }
@@ -359,6 +382,7 @@ public class ModelDownloadManager implements AutoCloseable {
         }
 
         executor.submit(() -> {
+            downloader.reset();
             Platform.runLater(() -> downloadingProperty.set(true));
             boolean allSuccess = true;
 
@@ -455,5 +479,87 @@ public class ModelDownloadManager implements AutoCloseable {
             downloadingProperty.set(false);
             statusTextProperty.set("下载已取消");
         });
+    }
+
+    public List<KwsModelOption> getKwsModelOptions() {
+        return kwsModelOptions;
+    }
+
+    public String getDefaultKwsModelId() {
+        return kwsModelOptions.isEmpty() ? configManager.getKwsModelName() : kwsModelOptions.get(0).getId();
+    }
+
+    public boolean isKwsModelReady(String modelId) {
+        return modelRepository.isKwsModelReady(modelId);
+    }
+
+    public boolean isAsrModelReady() {
+        return modelRepository.isAsrModelReady();
+    }
+
+    public boolean isVadModelReady() {
+        return modelRepository.isVadModelReady();
+    }
+
+    public ModelDescriptor buildKwsModelDescriptor(KwsModelOption option) {
+        String baseUrl = configManager.getModelDownloadBaseUrl();
+        String modelId = option.getId();
+        return new ModelDescriptor(
+            option.getName(),
+            URI.create(baseUrl + "/kws-models/" + modelId + ".tar.bz2"),
+            configManager.getCacheDir().resolve(modelId + ".tar.bz2"),
+            null,
+            null,
+            modelRepository.getKwsModelDir(modelId)
+        );
+    }
+
+    public ModelDescriptor buildAsrModelDescriptor() {
+        String baseUrl = configManager.getModelDownloadBaseUrl();
+        String asrModel = configManager.getAsrModelName();
+        return new ModelDescriptor(
+            "ASR 语音识别模型",
+            URI.create(baseUrl + "/asr-models/" + asrModel + ".tar.bz2"),
+            configManager.getCacheDir().resolve(asrModel + ".tar.bz2"),
+            null,
+            null,
+            modelRepository.getAsrModelDir()
+        );
+    }
+
+    public ModelDescriptor buildVadModelDescriptor() {
+        String baseUrl = configManager.getModelDownloadBaseUrl();
+        String vadModel = configManager.getVadModelName();
+        return new ModelDescriptor(
+            "VAD 静音检测模型",
+            URI.create(baseUrl + "/vad-models/" + vadModel),
+            modelRepository.getVadModelFile(),
+            null,
+            null
+        );
+    }
+
+    public static final class KwsModelOption {
+        private final String id;
+        private final String name;
+        private final String description;
+
+        public KwsModelOption(String id, String name, String description) {
+            this.id = id;
+            this.name = name;
+            this.description = description;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getDescription() {
+            return description;
+        }
     }
 }

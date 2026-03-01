@@ -5,9 +5,12 @@
 <?import javafx.scene.layout.*?>
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="com.classroomassistant.ui.MainController">
+            fx:controller="com.classroomassistant.desktop.ui.MainController">
     <top>
-        <HBox spacing="10" padding="12">
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <Label text="学生课堂挂机程序 v3.0" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="engineStatusLabel" text="" styleClass="info-label"/>
@@ -16,7 +19,10 @@
     </top>
 
     <center>
-        <VBox spacing="12" padding="12">
+        <VBox spacing="12">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <VBox spacing="8" styleClass="status-panel">
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <Label text="录音与检测状态" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
@@ -63,7 +69,10 @@
     </center>
 
     <bottom>
-        <HBox spacing="10" padding="12">
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
             <Button fx:id="startButton" text="上课（开始录音）" styleClass="primary-button" onAction="#startClass"/>
             <Button fx:id="stopButton" text="下课（停止录音）" styleClass="stop-button" onAction="#stopClass"/>
             <Region HBox.hgrow="ALWAYS"/>
@@ -71,4 +80,3 @@
         </HBox>
     </bottom>
 </BorderPane>
-

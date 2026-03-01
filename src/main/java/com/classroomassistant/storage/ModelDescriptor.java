@@ -19,6 +19,7 @@ public final class ModelDescriptor {
     private final Path targetPath;
     private final Long expectedSizeBytes;
     private final String expectedMd5Hex;
+    private final Path extractDir;
 
     /**
      * 构造模型下载描述
@@ -30,11 +31,23 @@ public final class ModelDescriptor {
      * @param expectedMd5Hex    预期 MD5 值（16进制字符串），为 null 或空则跳过 MD5 校验
      */
     public ModelDescriptor(String name, URI downloadUrl, Path targetPath, Long expectedSizeBytes, String expectedMd5Hex) {
+        this(name, downloadUrl, targetPath, expectedSizeBytes, expectedMd5Hex, null);
+    }
+
+    public ModelDescriptor(
+        String name,
+        URI downloadUrl,
+        Path targetPath,
+        Long expectedSizeBytes,
+        String expectedMd5Hex,
+        Path extractDir
+    ) {
         this.name = name;
         this.downloadUrl = downloadUrl;
         this.targetPath = targetPath;
         this.expectedSizeBytes = expectedSizeBytes;
         this.expectedMd5Hex = expectedMd5Hex;
+        this.extractDir = extractDir;
     }
 
     public String name() {
@@ -57,6 +70,10 @@ public final class ModelDescriptor {
         return expectedMd5Hex;
     }
 
+    public Path extractDir() {
+        return extractDir;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -66,12 +83,13 @@ public final class ModelDescriptor {
                 && Objects.equals(downloadUrl, that.downloadUrl)
                 && Objects.equals(targetPath, that.targetPath)
                 && Objects.equals(expectedSizeBytes, that.expectedSizeBytes)
-                && Objects.equals(expectedMd5Hex, that.expectedMd5Hex);
+                && Objects.equals(expectedMd5Hex, that.expectedMd5Hex)
+                && Objects.equals(extractDir, that.extractDir);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, downloadUrl, targetPath, expectedSizeBytes, expectedMd5Hex);
+        return Objects.hash(name, downloadUrl, targetPath, expectedSizeBytes, expectedMd5Hex, extractDir);
     }
 
     @Override
@@ -82,7 +100,7 @@ public final class ModelDescriptor {
                 ", targetPath=" + targetPath +
                 ", expectedSizeBytes=" + expectedSizeBytes +
                 ", expectedMd5Hex='" + expectedMd5Hex + '\'' +
+                ", extractDir=" + extractDir +
                 '}';
     }
 }
-

@@ -16,3 +16,38 @@
 .idea/
 .gradle/
 /local.properties
+# 业务产物和缓存
+models/
+recordings/
+logs/
+cache/
+# IDE和工具缓存
+.vscode/
+.DS_Store
+Thumbs.db
+# Gradle
+android/.gradle/
+android/app/.cxx/
+android/app/.externalNativeBuild/
+android/app/.idea/
+android/app/.kotlin/
+android/app/.signing/
+android/app/.cxx/
+android/app/.gradle/
+android/app/.DS_Store
+android/app/.log/
+android/app/.tmp/
+android/app/kotlin-compile-current.exit
+android/app/compile_kotlin.exit
+android/build/
+core/.DS_Store
+core/.log/
+core/.tmp/
+core/kotlin-compile-current.exit
+core/compile_kotlin.exit
+desktop/.DS_Store
+desktop/.log/
+desktop/.tmp/
+desktop/kotlin-compile-current.exit
+desktop/compile_kotlin.exit
+src/main/resources/config/application.properties

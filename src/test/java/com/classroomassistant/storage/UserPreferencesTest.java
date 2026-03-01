@@ -1,6 +1,7 @@
 package com.classroomassistant.storage;
 
 import com.classroomassistant.ai.LLMConfig;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,10 @@ class UserPreferencesTest {
             .aiModelName("deepseek-chat")
             .aiTokenPlainText("token123")
             .speechApiKey("speech-key-456")
+            .selectedKwsModelIds(Set.of("model-a", "model-b"))
+            .currentKwsModelId("model-b")
+            .asrModelSelected(false)
+            .vadModelSelected(true)
             .build();
 
         assertEquals("张三", prefs.getKeywords());
@@ -39,6 +44,10 @@ class UserPreferencesTest {
         assertEquals("deepseek-chat", prefs.getAiModelName());
         assertEquals("token123", prefs.getAiTokenPlainText());
         assertEquals("speech-key-456", prefs.getSpeechApiKey());
+        assertEquals(Set.of("model-a", "model-b"), prefs.getSelectedKwsModelIds());
+        assertEquals("model-b", prefs.getCurrentKwsModelId());
+        assertFalse(prefs.isAsrModelSelected());
+        assertTrue(prefs.isVadModelSelected());
     }
 
     @Test
@@ -56,6 +65,10 @@ class UserPreferencesTest {
         assertEquals("", prefs.getAiModelName());
         assertEquals("", prefs.getAiTokenPlainText());
         assertEquals("", prefs.getSpeechApiKey());
+        assertEquals(Set.of(), prefs.getSelectedKwsModelIds());
+        assertEquals("", prefs.getCurrentKwsModelId());
+        assertTrue(prefs.isAsrModelSelected());
+        assertTrue(prefs.isVadModelSelected());
     }
 
     @Test

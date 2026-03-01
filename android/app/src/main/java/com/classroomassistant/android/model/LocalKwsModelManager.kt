@@ -12,13 +12,22 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class LocalKwsModelManager(
     private val context: Context,
     private val storage: AndroidStorage,
     private val client: OkHttpClient = OkHttpClient()
 ) {
+    private val requiredFiles = listOf("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
+    private val optionalKeywordFiles = listOf("keywords.txt", "test_keywords.txt")
     private val baseUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
+    private val downloadClient = client.newBuilder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(2, TimeUnit.MINUTES)
+        .writeTimeout(2, TimeUnit.MINUTES)
+        .callTimeout(15, TimeUnit.MINUTES)
+        .build()
     private val models = listOf(
         KwsModelOption(
             id = "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01",
@@ -49,8 +58,7 @@ class LocalKwsModelManager(
 
     fun isModelReady(modelId: String = getDefaultModelId()): Boolean {
         val dir = getModelDir(modelId)
-        return listOf("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
-            .all { File(dir, it).exists() }
+        return missingFiles(dir).isEmpty()
     }
 
     fun downloadAndPrepare(
@@ -60,7 +68,7 @@ class LocalKwsModelManager(
         val archive = File(context.cacheDir, "kws_${modelId}_${UUID.randomUUID()}.tar.bz2")
         val tmpArchive = File(archive.absolutePath + ".part")
         try {
-            downloadArchive(tmpArchive, modelId, onProgress)
+            downloadArchiveWithRetry(tmpArchive, modelId, onProgress)
             if (!tmpArchive.renameTo(archive)) {
                 return Result.failure(IOException("模型包移动失败"))
             }
@@ -69,17 +77,26 @@ class LocalKwsModelManager(
                 extractDir.mkdirs()
             }
             extractTarBz2(archive, extractDir)
-            val modelDir = resolveModelDir(extractDir)
-                ?: return Result.failure(IOException("模型目录结构异常"))
             val targetDir = getModelDir(modelId)
             deleteRecursively(targetDir)
-            if (!modelDir.renameTo(targetDir)) {
-                copyRecursively(modelDir, targetDir)
-                deleteRecursively(modelDir)
+            targetDir.mkdirs()
+            val required = collectRequiredFiles(extractDir)
+            val missing = requiredFiles.filter { required[it] == null }
+            if (missing.isNotEmpty()) {
+                return Result.failure(IOException("模型文件不完整: ${missing.joinToString(", ")}"))
+            }
+            requiredFiles.forEach { name ->
+                val source = required[name] ?: return@forEach
+                copyRecursively(source, File(targetDir, name))
+            }
+            optionalKeywordFiles.forEach { name ->
+                val source = required[name] ?: return@forEach
+                copyRecursively(source, File(targetDir, name))
             }
             deleteRecursively(extractDir)
             if (!isModelReady(modelId)) {
-                return Result.failure(IOException("模型文件不完整"))
+                val missing = missingFiles(targetDir)
+                return Result.failure(IOException("模型文件不完整: ${missing.joinToString(", ")}"))
             }
             return Result.success(targetDir)
         } catch (e: Exception) {
@@ -121,7 +138,7 @@ class LocalKwsModelManager(
     ) {
         val url = "$baseUrl/kws-models/$modelId.tar.bz2"
         val request = Request.Builder().url(url).build()
-        client.newCall(request).execute().use { response ->
+        downloadClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("下载失败: ${response.code}")
             }
@@ -141,6 +158,30 @@ class LocalKwsModelManager(
                 }
             }
         }
+    }
+
+    private fun downloadArchiveWithRetry(
+        target: File,
+        modelId: String,
+        onProgress: (Long, Long) -> Unit
+    ) {
+        val maxAttempts = 3
+        var lastError: IOException? = null
+        for (attempt in 1..maxAttempts) {
+            try {
+                if (target.exists()) {
+                    target.delete()
+                }
+                downloadArchive(target, modelId, onProgress)
+                return
+            } catch (e: IOException) {
+                lastError = e
+                if (attempt < maxAttempts) {
+                    Thread.sleep(1200L * attempt)
+                }
+            }
+        }
+        throw lastError ?: IOException("下载失败")
     }
 
     data class KwsModelOption(
@@ -182,13 +223,85 @@ class LocalKwsModelManager(
         }
     }
 
-    private fun resolveModelDir(root: File): File? {
-        val tokens = File(root, "tokens.txt")
-        if (tokens.exists()) {
-            return root
+    private fun missingFiles(dir: File): List<String> {
+        return requiredFiles.filter { !File(dir, it).exists() }
+    }
+
+    private fun collectRequiredFiles(root: File): Map<String, File> {
+        val allFiles = collectAllFiles(root)
+        val found = mutableMapOf<String, File>()
+        allFiles.forEach { entry ->
+            if (entry.name in requiredFiles && !found.containsKey(entry.name)) {
+                found[entry.name] = entry
+            }
         }
-        val children = root.listFiles()?.filter { it.isDirectory } ?: return null
-        return children.firstOrNull { File(it, "tokens.txt").exists() }
+        optionalKeywordFiles.forEach { keywordFileName ->
+            allFiles.firstOrNull { it.name.equals(keywordFileName, ignoreCase = true) }?.let {
+                found[keywordFileName] = it
+            }
+        }
+        if (!found.containsKey("tokens.txt")) {
+            allFiles.firstOrNull { it.name.equals("tokens.txt", ignoreCase = true) }?.let {
+                found["tokens.txt"] = it
+            }
+        }
+        if (!found.containsKey("encoder.onnx")) {
+            selectOnnxCandidate(allFiles, "encoder")?.let { found["encoder.onnx"] = it }
+        }
+        if (!found.containsKey("decoder.onnx")) {
+            selectOnnxCandidate(allFiles, "decoder")?.let { found["decoder.onnx"] = it }
+        }
+        if (!found.containsKey("joiner.onnx")) {
+            selectOnnxCandidate(allFiles, "joiner")?.let { found["joiner.onnx"] = it }
+        }
+        return found
+    }
+
+    private fun collectAllFiles(root: File): List<File> {
+        val result = mutableListOf<File>()
+        val queue = ArrayDeque<Pair<File, Int>>()
+        queue.add(root to 0)
+        while (queue.isNotEmpty()) {
+            val (dir, depth) = queue.removeFirst()
+            dir.listFiles()?.forEach { entry ->
+                if (entry.isDirectory) {
+                    if (depth < 12) {
+                        queue.add(entry to depth + 1)
+                    }
+                } else {
+                    result.add(entry)
+                }
+            }
+        }
+        return result
+    }
+
+    private fun selectOnnxCandidate(files: List<File>, keyword: String): File? {
+        val candidates = files.filter { file ->
+            file.name.endsWith(".onnx", ignoreCase = true) && file.name.contains(keyword, ignoreCase = true)
+        }
+        if (candidates.isEmpty()) {
+            return null
+        }
+        return candidates.maxBy { scoreOnnxCandidate(it.name) }
+    }
+
+    private fun scoreOnnxCandidate(name: String): Int {
+        var score = 0
+        if (!name.contains("int8", ignoreCase = true)) {
+            score += 100
+        }
+        if (name.contains("epoch-12-avg-2", ignoreCase = true)) {
+            score += 50
+        }
+        if (name.contains("epoch-99-avg-1", ignoreCase = true)) {
+            score += 40
+        }
+        if (name.contains("chunk", ignoreCase = true)) {
+            score += 5
+        }
+        score -= name.length / 10
+        return score
     }
 
     private fun deleteRecursively(file: File) {

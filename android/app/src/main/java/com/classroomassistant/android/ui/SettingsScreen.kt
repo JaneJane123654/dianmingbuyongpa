@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.classroomassistant.android.model.LocalAsrModelManager
 import com.classroomassistant.android.model.LocalKwsModelManager
 
 /**
@@ -36,31 +37,84 @@ fun SettingsScreen(
     onCurrentModelChange: (String) -> Unit,
     onToggleModelSelection: (String, Boolean) -> Unit,
     onDownloadSelected: () -> Unit,
-    onRefreshModelStatus: () -> Unit
+    onRefreshModelStatus: () -> Unit,
+    asrModelOptions: List<LocalAsrModelManager.AsrModelOption>,
+    asrCurrentModelId: String,
+    asrModelStatusMap: Map<String, String>,
+    asrModelProgressMap: Map<String, Float>,
+    asrModelFailureMap: Map<String, String>,
+    isAsrDownloading: Boolean,
+    onDownloadAsrModel: (String) -> Unit,
+    onRefreshAsrModelStatus: () -> Unit
 ) {
     var keywords by remember { mutableStateOf(initialSettings.keywords) }
+    var kwsThreshold by remember { mutableStateOf(initialSettings.kwsThreshold) }
     var vadEnabled by remember { mutableStateOf(initialSettings.vadEnabled) }
     var quietThreshold by remember { mutableStateOf(initialSettings.quietThreshold) }
+    var quietAlertMode by remember { mutableStateOf(initialSettings.quietAlertMode) }
+    var quietAutoLookbackEnabled by remember { mutableStateOf(initialSettings.quietAutoLookbackEnabled) }
+    var quietAutoLookbackExtraSeconds by remember { mutableStateOf(initialSettings.quietAutoLookbackExtraSeconds) }
     var lookbackSeconds by remember { mutableStateOf(initialSettings.lookbackSeconds) }
     var recordingSaveEnabled by remember { mutableStateOf(initialSettings.recordingSaveEnabled) }
     var retentionDays by remember { mutableStateOf(initialSettings.retentionDays) }
     var aiProvider by remember { mutableStateOf(initialSettings.aiProvider) }
     var modelName by remember { mutableStateOf(initialSettings.modelName) }
     var apiToken by remember { mutableStateOf(initialSettings.apiToken) }
+    var apiSecretKey by remember { mutableStateOf(initialSettings.apiSecretKey) }
     var speechApiKey by remember { mutableStateOf(initialSettings.speechApiKey) }
+    var localAsrEnabled by remember { mutableStateOf(initialSettings.localAsrEnabled) }
+    var localAsrModelId by remember { mutableStateOf(initialSettings.localAsrModelId.ifBlank { asrCurrentModelId }) }
+    var cloudWhisperEnabled by remember { mutableStateOf(initialSettings.cloudWhisperEnabled) }
+    var wakeAlertMode by remember { mutableStateOf(initialSettings.wakeAlertMode) }
+    var logMode by remember { mutableStateOf(initialSettings.logMode) }
+    var showDiagnosticLogs by remember { mutableStateOf(initialSettings.showDiagnosticLogs) }
+    var showAudioDeviceLogs by remember { mutableStateOf(initialSettings.showAudioDeviceLogs) }
+    var showGainActivityLogs by remember { mutableStateOf(initialSettings.showGainActivityLogs) }
+    var showTtsSelfTestLogs by remember { mutableStateOf(initialSettings.showTtsSelfTestLogs) }
+    var showHeartbeatLogs by remember { mutableStateOf(initialSettings.showHeartbeatLogs) }
+    var ttsSelfTestEnabled by remember { mutableStateOf(initialSettings.ttsSelfTestEnabled) }
+    var backgroundKeepAliveEnabled by remember { mutableStateOf(initialSettings.backgroundKeepAliveEnabled) }
     var infoDialogModel by remember { mutableStateOf<LocalKwsModelManager.KwsModelOption?>(null) }
+    val switchColors = SwitchDefaults.colors(
+        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+        checkedTrackColor = MaterialTheme.colorScheme.primary,
+        uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+        uncheckedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+        uncheckedBorderColor = MaterialTheme.colorScheme.primary
+    )
+    val radioColors = RadioButtonDefaults.colors(
+        selectedColor = MaterialTheme.colorScheme.primary,
+        unselectedColor = MaterialTheme.colorScheme.primary
+    )
 
     LaunchedEffect(initialSettings) {
         keywords = initialSettings.keywords
+        kwsThreshold = initialSettings.kwsThreshold
         vadEnabled = initialSettings.vadEnabled
         quietThreshold = initialSettings.quietThreshold
+        quietAlertMode = initialSettings.quietAlertMode
+        quietAutoLookbackEnabled = initialSettings.quietAutoLookbackEnabled
+        quietAutoLookbackExtraSeconds = initialSettings.quietAutoLookbackExtraSeconds
         lookbackSeconds = initialSettings.lookbackSeconds
         recordingSaveEnabled = initialSettings.recordingSaveEnabled
         retentionDays = initialSettings.retentionDays
         aiProvider = initialSettings.aiProvider
         modelName = initialSettings.modelName
         apiToken = initialSettings.apiToken
+        apiSecretKey = initialSettings.apiSecretKey
         speechApiKey = initialSettings.speechApiKey
+        localAsrEnabled = initialSettings.localAsrEnabled
+        localAsrModelId = initialSettings.localAsrModelId.ifBlank { asrCurrentModelId }
+        cloudWhisperEnabled = initialSettings.cloudWhisperEnabled
+        wakeAlertMode = initialSettings.wakeAlertMode
+        logMode = initialSettings.logMode
+        showDiagnosticLogs = initialSettings.showDiagnosticLogs
+        showAudioDeviceLogs = initialSettings.showAudioDeviceLogs
+        showGainActivityLogs = initialSettings.showGainActivityLogs
+        showTtsSelfTestLogs = initialSettings.showTtsSelfTestLogs
+        showHeartbeatLogs = initialSettings.showHeartbeatLogs
+        ttsSelfTestEnabled = initialSettings.ttsSelfTestEnabled
+        backgroundKeepAliveEnabled = initialSettings.backgroundKeepAliveEnabled
     }
 
     if (infoDialogModel != null) {
@@ -73,6 +127,40 @@ fun SettingsScreen(
                     Text("知道了")
                 }
             }
+        )
+    }
+
+    val saveSettingsAction = {
+        onSave(
+            SettingsData(
+                keywords = keywords,
+                kwsThreshold = kwsThreshold,
+                vadEnabled = vadEnabled,
+                quietThreshold = quietThreshold,
+                quietAlertMode = quietAlertMode,
+                quietAutoLookbackEnabled = quietAutoLookbackEnabled,
+                quietAutoLookbackExtraSeconds = quietAutoLookbackExtraSeconds,
+                lookbackSeconds = lookbackSeconds,
+                recordingSaveEnabled = recordingSaveEnabled,
+                retentionDays = retentionDays,
+                aiProvider = aiProvider,
+                modelName = modelName,
+                apiToken = apiToken,
+                apiSecretKey = apiSecretKey,
+                speechApiKey = speechApiKey,
+                localAsrEnabled = localAsrEnabled,
+                localAsrModelId = localAsrModelId,
+                cloudWhisperEnabled = cloudWhisperEnabled,
+                wakeAlertMode = wakeAlertMode,
+                logMode = logMode,
+                showDiagnosticLogs = showDiagnosticLogs,
+                showAudioDeviceLogs = showAudioDeviceLogs,
+                showGainActivityLogs = showGainActivityLogs,
+                showTtsSelfTestLogs = showTtsSelfTestLogs,
+                showHeartbeatLogs = showHeartbeatLogs,
+                ttsSelfTestEnabled = ttsSelfTestEnabled,
+                backgroundKeepAliveEnabled = backgroundKeepAliveEnabled
+            )
         )
     }
 
@@ -90,6 +178,24 @@ fun SettingsScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary,
                 )
             )
+        },
+        bottomBar = {
+            Surface(tonalElevation = 2.dp) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Button(
+                        onClick = { saveSettingsAction() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        Text("保存设置", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Column(
@@ -109,7 +215,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "姓名/变体（逗号分隔）",
+                        text = "支持多个唤醒词（支持中文逗号“，”和英文逗号“,”）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -117,9 +223,71 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = keywords,
                         onValueChange = { keywords = it },
-                        label = { Text("例如：张三,张三同学") },
+                        label = { Text("例如：陈慧萍，小张,张老师") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "中文词条长度≥3时，会自动把后两个字加入候选（如“张三四”自动追加“三四”）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "唤醒词触发值：${String.format("%.2f", kwsThreshold)}（推荐 0.25）",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = kwsThreshold,
+                        onValueChange = { kwsThreshold = it },
+                        valueRange = 0.05f..0.8f,
+                        steps = 14
+                    )
+                    Text(
+                        text = "说明：值越低越灵敏、越高越稳健；推荐先用 0.25，再按环境微调。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "唤醒提示",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "检测到唤醒词时的手机提醒方式",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("仅系统通知")
+                        RadioButton(
+                            selected = wakeAlertMode != "SOUND",
+                            onClick = { wakeAlertMode = "NOTIFICATION_ONLY" },
+                            colors = radioColors
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("系统通知 + 提示音")
+                        RadioButton(
+                            selected = wakeAlertMode == "SOUND",
+                            onClick = { wakeAlertMode = "SOUND" },
+                            colors = radioColors
+                        )
+                    }
                 }
             }
 
@@ -139,13 +307,14 @@ fun SettingsScreen(
                         Text("启用安静检测")
                         Switch(
                             checked = vadEnabled,
-                            onCheckedChange = { vadEnabled = it }
+                            onCheckedChange = { vadEnabled = it },
+                            colors = switchColors
                         )
                     }
                     if (vadEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "阈值：${quietThreshold} 秒",
+                            text = "阈值：${quietThreshold} 秒（推荐 5 秒）",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Slider(
@@ -154,6 +323,73 @@ fun SettingsScreen(
                             valueRange = 3f..30f,
                             steps = 26
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "安静超时提醒方式",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("仅系统通知")
+                            RadioButton(
+                                selected = quietAlertMode != "SOUND",
+                                onClick = { quietAlertMode = "NOTIFICATION_ONLY" },
+                                colors = radioColors
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("系统通知 + 提示音")
+                            RadioButton(
+                                selected = quietAlertMode == "SOUND",
+                                onClick = { quietAlertMode = "SOUND" },
+                                colors = radioColors
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("安静超时后自动扩展回溯")
+                            Switch(
+                                checked = quietAutoLookbackEnabled,
+                                onCheckedChange = { quietAutoLookbackEnabled = it },
+                                colors = switchColors
+                            )
+                        }
+                        if (quietAutoLookbackEnabled) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "额外回溯：${quietAutoLookbackExtraSeconds} 秒（默认 8 秒）",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Slider(
+                                value = quietAutoLookbackExtraSeconds.toFloat(),
+                                onValueChange = { quietAutoLookbackExtraSeconds = it.toInt() },
+                                valueRange = 1f..60f,
+                                steps = 58
+                            )
+                            Text(
+                                text = "生效规则：实际回溯会按“安静时长 + 额外秒数”动态扩大（且不小于语音回溯设置）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Text(
+                                text = "说明：关闭后仍会按“语音回溯”中的固定秒数回溯；仅不再因安静超时自动加长回溯。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -167,14 +403,41 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "回溯秒数：${lookbackSeconds} 秒",
+                        text = "回溯秒数：${lookbackSeconds} 秒（推荐 12~20 秒）",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
                         value = lookbackSeconds.toFloat(),
                         onValueChange = { lookbackSeconds = it.toInt() },
-                        valueRange = 60f..300f,
-                        steps = 23
+                        valueRange = 8f..120f,
+                        steps = 0
+                    )
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "后台保活",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("监听时启用后台保活")
+                        Switch(
+                            checked = backgroundKeepAliveEnabled,
+                            onCheckedChange = { backgroundKeepAliveEnabled = it },
+                            colors = switchColors
+                        )
+                    }
+                    Text(
+                        text = "开启后会显示持续通知，降低切到桌面后被系统回收导致监听中断的概率。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -195,13 +458,14 @@ fun SettingsScreen(
                         Text("保存触发录音（WAV）")
                         Switch(
                             checked = recordingSaveEnabled,
-                            onCheckedChange = { recordingSaveEnabled = it }
+                            onCheckedChange = { recordingSaveEnabled = it },
+                            colors = switchColors
                         )
                     }
                     if (recordingSaveEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "保留天数：${retentionDays} 天",
+                            text = "保留天数：${retentionDays} 天（推荐 7 天）",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Slider(
@@ -214,29 +478,6 @@ fun SettingsScreen(
                 }
             }
 
-            // 语音识别 API 设置
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "语音识别（云端 API）",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "使用 Groq Whisper 等云端服务进行语音识别",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = speechApiKey,
-                        onValueChange = { speechApiKey = it },
-                        label = { Text("Speech API Key") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
 
             // AI 问答设置
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -280,12 +521,46 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = modelName,
-                        onValueChange = { modelName = it },
-                        label = { Text("模型名称（可选）") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    val modelNameOptions = remember(aiProvider) {
+                        when (aiProvider.uppercase()) {
+                            "OPENAI" -> listOf("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini")
+                            "DEEPSEEK" -> listOf("deepseek-chat", "deepseek-reasoner")
+                            "KIMI" -> listOf("moonshot-v1-8k", "moonshot-v1-32k")
+                            "QIANFAN" -> listOf("ernie-4.0-8k", "ernie-3.5-8k")
+                            else -> emptyList()
+                        }
+                    }
+                    var modelExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = modelExpanded,
+                        onExpandedChange = { modelExpanded = !modelExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = modelName,
+                            onValueChange = { modelName = it },
+                            label = { Text("模型名称（可选）") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelExpanded,
+                            onDismissRequest = { modelExpanded = false }
+                        ) {
+                            modelNameOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        modelName = option
+                                        modelExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = apiToken,
@@ -294,6 +569,148 @@ fun SettingsScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (aiProvider.uppercase() == "QIANFAN") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = apiSecretKey,
+                            onValueChange = { apiSecretKey = it },
+                            label = { Text("Secret Key（千帆，可选）") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            // 语音识别 API 设置
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "语音识别路线",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("启用本机ASR模型")
+                        Switch(
+                            checked = localAsrEnabled,
+                            onCheckedChange = { localAsrEnabled = it },
+                            colors = switchColors
+                        )
+                    }
+
+                    if (localAsrEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "本机模型（默认推荐中英双语快速模型）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        var asrExpanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = asrExpanded,
+                            onExpandedChange = { asrExpanded = !asrExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = asrModelOptions.firstOrNull { it.id == localAsrModelId }?.name ?: localAsrModelId,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("本机ASR模型") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = asrExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = asrExpanded,
+                                onDismissRequest = { asrExpanded = false }
+                            ) {
+                                asrModelOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.name) },
+                                        onClick = {
+                                            localAsrModelId = option.id
+                                            asrExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val asrStatus = asrModelStatusMap[localAsrModelId] ?: "未下载"
+                        Text(
+                            text = "模型状态：$asrStatus",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (asrStatus.startsWith("下载中")) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { asrModelProgressMap[localAsrModelId] ?: 0f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        val asrFailureReason = asrModelFailureMap[localAsrModelId].orEmpty()
+                        if (asrStatus == "失败" && asrFailureReason.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "原因：$asrFailureReason",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = { onDownloadAsrModel(localAsrModelId) },
+                                enabled = !isAsrDownloading,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("下载本机模型")
+                            }
+                            OutlinedButton(
+                                onClick = { onRefreshAsrModelStatus() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("刷新状态")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("启用云端 Whisper")
+                        Switch(
+                            checked = cloudWhisperEnabled,
+                            onCheckedChange = { cloudWhisperEnabled = it },
+                            colors = switchColors
+                        )
+                    }
+                    Text(
+                        text = "说明：启用后将优先走云端Whisper路线；默认关闭。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (cloudWhisperEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = speechApiKey,
+                            onValueChange = { speechApiKey = it },
+                            label = { Text("Speech API Key") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
 
@@ -420,31 +837,122 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 保存按钮
-            Button(
-                onClick = {
-                    onSave(
-                        SettingsData(
-                            keywords = keywords,
-                            vadEnabled = vadEnabled,
-                            quietThreshold = quietThreshold,
-                            lookbackSeconds = lookbackSeconds,
-                            recordingSaveEnabled = recordingSaveEnabled,
-                            retentionDays = retentionDays,
-                            aiProvider = aiProvider,
-                            modelName = modelName,
-                            apiToken = apiToken,
-                            speechApiKey = speechApiKey
-                        )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "开发者选项",
+                        style = MaterialTheme.typography.titleMedium
                     )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("保存设置", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "普通用户建议保持“简洁日志”；开发调试可切换“全面日志”并按分类开启",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("简洁日志")
+                        RadioButton(
+                            selected = logMode != "FULL",
+                            onClick = { logMode = "SIMPLE" },
+                            colors = radioColors
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("全面日志")
+                        RadioButton(
+                            selected = logMode == "FULL",
+                            onClick = { logMode = "FULL" },
+                            colors = radioColors
+                        )
+                    }
+
+                    if (logMode == "FULL") {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("监听诊断日志")
+                            Switch(
+                                checked = showDiagnosticLogs,
+                                onCheckedChange = { showDiagnosticLogs = it },
+                                colors = switchColors
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("音频设备日志")
+                            Switch(
+                                checked = showAudioDeviceLogs,
+                                onCheckedChange = { showAudioDeviceLogs = it },
+                                colors = switchColors
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("增益/语音活动日志")
+                            Switch(
+                                checked = showGainActivityLogs,
+                                onCheckedChange = { showGainActivityLogs = it },
+                                colors = switchColors
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("TTS 自测日志")
+                            Switch(
+                                checked = showTtsSelfTestLogs,
+                                onCheckedChange = { showTtsSelfTestLogs = it },
+                                colors = switchColors
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("心跳日志（正在监听）")
+                            Switch(
+                                checked = showHeartbeatLogs,
+                                onCheckedChange = { showHeartbeatLogs = it },
+                                colors = switchColors
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("启用 TTS 自测")
+                        Switch(
+                            checked = ttsSelfTestEnabled,
+                            onCheckedChange = { ttsSelfTestEnabled = it },
+                            colors = switchColors
+                        )
+                    }
+                }
             }
         }
     }
@@ -455,13 +963,30 @@ fun SettingsScreen(
  */
 data class SettingsData(
     val keywords: String,
+    val kwsThreshold: Float,
     val vadEnabled: Boolean,
     val quietThreshold: Int,
+    val quietAlertMode: String,
+    val quietAutoLookbackEnabled: Boolean,
+    val quietAutoLookbackExtraSeconds: Int,
     val lookbackSeconds: Int,
     val recordingSaveEnabled: Boolean,
     val retentionDays: Int,
     val aiProvider: String,
     val modelName: String,
     val apiToken: String,
-    val speechApiKey: String
+    val apiSecretKey: String,
+    val speechApiKey: String,
+    val localAsrEnabled: Boolean,
+    val localAsrModelId: String,
+    val cloudWhisperEnabled: Boolean,
+    val wakeAlertMode: String,
+    val logMode: String,
+    val showDiagnosticLogs: Boolean,
+    val showAudioDeviceLogs: Boolean,
+    val showGainActivityLogs: Boolean,
+    val showTtsSelfTestLogs: Boolean,
+    val showHeartbeatLogs: Boolean,
+    val ttsSelfTestEnabled: Boolean,
+    val backgroundKeepAliveEnabled: Boolean
 )
