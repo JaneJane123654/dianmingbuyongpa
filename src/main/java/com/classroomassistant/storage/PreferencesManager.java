@@ -22,7 +22,8 @@ import org.slf4j.LoggerFactory;
 /**
  * 用户配置管理器 (Preferences Manager)
  *
- * <p>基于 Java Preferences API 实现用户个性化设置的持久化存储。
+ * <p>
+ * 基于 Java Preferences API 实现用户个性化设置的持久化存储。
  * 核心功能包括配置项的加载、保存，以及对敏感信息（如 AI API Token）的 AES-GCM 加密保护。
  *
  * @author Code Assistant
@@ -103,7 +104,8 @@ public class PreferencesManager {
 
         LLMConfig.ModelType modelType;
         try {
-            modelType = LLMConfig.ModelType.valueOf(preferences.get(KEY_AI_PROVIDER, LLMConfig.ModelType.QIANFAN.name()));
+            modelType = LLMConfig.ModelType
+                    .valueOf(preferences.get(KEY_AI_PROVIDER, LLMConfig.ModelType.QIANFAN.name()));
         } catch (Exception e) {
             modelType = LLMConfig.ModelType.QIANFAN;
         }
@@ -128,38 +130,38 @@ public class PreferencesManager {
         boolean backgroundKeepAliveEnabled = preferences.getBoolean(KEY_BACKGROUND_KEEPALIVE_ENABLED, true);
 
         return UserPreferences.builder()
-            .keywords(Validator.normalizeKeywords(keywords))
-            .kwsThreshold(kwsThreshold)
-            .audioLookbackSeconds(lookbackSeconds)
-            .vadEnabled(vadEnabled)
-            .vadQuietThresholdSeconds(quietThresholdSeconds)
-            .quietAlertMode(quietAlertMode)
-            .quietAutoLookbackEnabled(quietAutoLookbackEnabled)
-            .quietAutoLookbackExtraSeconds(quietAutoLookbackExtraSeconds)
-            .aiModelType(modelType)
-            .aiModelName(modelName)
-            .recordingSaveEnabled(recordingSaveEnabled)
-            .recordingRetentionDays(recordingRetentionDays)
-            .aiTokenPlainText("")
-            .aiSecretKey("")
-            .speechApiKey("")
-            .localAsrEnabled(localAsrEnabled)
-            .localAsrModelId(localAsrModelId)
-            .cloudWhisperEnabled(cloudWhisperEnabled)
-            .selectedKwsModelIds(selectedKwsModels)
-            .currentKwsModelId(currentKwsModel)
-            .asrModelSelected(asrSelected)
-            .vadModelSelected(vadSelected)
-            .wakeAlertMode(wakeAlertMode)
-            .logMode(logMode)
-            .showDiagnosticLogs(showDiagnosticLogs)
-            .showAudioDeviceLogs(showAudioDeviceLogs)
-            .showGainActivityLogs(showGainActivityLogs)
-            .showTtsSelfTestLogs(showTtsSelfTestLogs)
-            .showHeartbeatLogs(showHeartbeatLogs)
-            .ttsSelfTestEnabled(ttsSelfTestEnabled)
-            .backgroundKeepAliveEnabled(backgroundKeepAliveEnabled)
-            .build();
+                .keywords(Validator.normalizeKeywords(keywords))
+                .kwsThreshold(kwsThreshold)
+                .audioLookbackSeconds(lookbackSeconds)
+                .vadEnabled(vadEnabled)
+                .vadQuietThresholdSeconds(quietThresholdSeconds)
+                .quietAlertMode(quietAlertMode)
+                .quietAutoLookbackEnabled(quietAutoLookbackEnabled)
+                .quietAutoLookbackExtraSeconds(quietAutoLookbackExtraSeconds)
+                .aiModelType(modelType)
+                .aiModelName(modelName)
+                .recordingSaveEnabled(recordingSaveEnabled)
+                .recordingRetentionDays(recordingRetentionDays)
+                .aiTokenPlainText("")
+                .aiSecretKey("")
+                .speechApiKey("")
+                .localAsrEnabled(localAsrEnabled)
+                .localAsrModelId(localAsrModelId)
+                .cloudWhisperEnabled(cloudWhisperEnabled)
+                .selectedKwsModelIds(selectedKwsModels)
+                .currentKwsModelId(currentKwsModel)
+                .asrModelSelected(asrSelected)
+                .vadModelSelected(vadSelected)
+                .wakeAlertMode(wakeAlertMode)
+                .logMode(logMode)
+                .showDiagnosticLogs(showDiagnosticLogs)
+                .showAudioDeviceLogs(showAudioDeviceLogs)
+                .showGainActivityLogs(showGainActivityLogs)
+                .showTtsSelfTestLogs(showTtsSelfTestLogs)
+                .showHeartbeatLogs(showHeartbeatLogs)
+                .ttsSelfTestEnabled(ttsSelfTestEnabled)
+                .backgroundKeepAliveEnabled(backgroundKeepAliveEnabled)
+                .build();
     }
 
     /**
@@ -174,10 +176,11 @@ public class PreferencesManager {
         preferences.putInt(KEY_AUDIO_LOOKBACK_SECONDS, prefs.getAudioLookbackSeconds());
         preferences.putBoolean(KEY_VAD_ENABLED, prefs.isVadEnabled());
         preferences.putInt(KEY_VAD_QUIET_THRESHOLD_SECONDS, prefs.getVadQuietThresholdSeconds());
-        preferences.put(KEY_VAD_QUIET_ALERT_MODE, "SOUND".equals(prefs.getQuietAlertMode()) ? "SOUND" : "NOTIFICATION_ONLY");
+        preferences.put(KEY_VAD_QUIET_ALERT_MODE,
+                "SOUND".equals(prefs.getQuietAlertMode()) ? "SOUND" : "NOTIFICATION_ONLY");
         preferences.putBoolean(KEY_VAD_QUIET_AUTO_LOOKBACK_ENABLED, prefs.isQuietAutoLookbackEnabled());
         preferences.putInt(KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS,
-            Math.max(1, Math.min(60, prefs.getQuietAutoLookbackExtraSeconds())));
+                Math.max(1, Math.min(60, prefs.getQuietAutoLookbackExtraSeconds())));
         preferences.put(KEY_AI_PROVIDER, prefs.getAiModelType().name());
         preferences.put(KEY_AI_MODEL_NAME, prefs.getAiModelName());
         preferences.putBoolean(KEY_RECORDING_SAVE_ENABLED, prefs.isRecordingSaveEnabled());
@@ -224,9 +227,9 @@ public class PreferencesManager {
         }
         Set<String> result = new LinkedHashSet<>();
         Arrays.stream(raw.split(","))
-            .map(String::trim)
-            .filter(value -> !value.isEmpty())
-            .forEach(result::add);
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .forEach(result::add);
         return result;
     }
 

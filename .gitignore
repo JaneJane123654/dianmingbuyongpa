@@ -1,45 +1,50 @@
 # 忽略构建输出和临时文件
 /build/
-/android/app/build/
-/android/build/
-/core/target/
-/desktop/target/
-/target/
+**/build/
+**/target/
 *.class
 *.apk
 *.jar
+*.exe
 *.log
 *.tmp
 *.exit
-*.bat
-*.sh
-.idea/
-.gradle/
 /local.properties
+**/local.properties
+*.sha1
+*.pom
+_remote.repositories
+
+# 规范文档
+实现文档.md
+详细实现文档.md
+学生课堂挂机程序 - 编码规范.md
+学生课堂挂机程序 - 项目规则规范.md
+
+# Maven 依赖目录
+.m2/
+.mvn/
+
 # 业务产物和缓存
 models/
 recordings/
 logs/
 cache/
+
 # IDE和工具缓存
+.idea/
 .vscode/
+*.iml
 .DS_Store
 Thumbs.db
+
 # Gradle
-android/.gradle/
+.gradle/
+**/.gradle/
 android/app/.cxx/
 android/app/.externalNativeBuild/
-android/app/.idea/
 android/app/.kotlin/
 android/app/.signing/
-android/app/.cxx/
-android/app/.gradle/
-android/app/.DS_Store
-android/app/.log/
-android/app/.tmp/
-android/app/kotlin-compile-current.exit
-android/app/compile_kotlin.exit
-android/build/
 core/.DS_Store
 core/.log/
 core/.tmp/

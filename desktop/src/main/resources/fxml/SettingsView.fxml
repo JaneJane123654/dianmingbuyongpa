@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.classroomassistant.desktop.ui.DesktopSettingsController">
+    <top>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+            <Label text="设置" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+        </HBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+            <content>
+                <VBox spacing="12">
+                    <!-- 唤醒词 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="唤醒词" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label text="支持多个唤醒词（支持中文逗号"，"和英文逗号","）" styleClass="info-label"/>
+                        <TextField fx:id="keywordsField" promptText="例如：陈慧萍，小张,张老师"/>
+                        <Label text="中文词条长度≥3时，会自动把后两个字加入候选（如"张三四"自动追加"三四"）。" styleClass="info-label"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="唤醒词触发值" styleClass="info-label"/>
+                            <Slider fx:id="kwsThresholdSlider" min="0.05" max="0.8" value="0.25" majorTickUnit="0.05" showTickLabels="true" showTickMarks="true" prefWidth="260"/>
+                            <Label fx:id="kwsThresholdLabel" text="0.25" styleClass="info-label"/>
+                        </HBox>
+                        <Label text="说明：值越低越灵敏、越高越稳健；推荐先用 0.25，再按环境微调。" styleClass="info-label"/>
+                    </VBox>
+
+                    <!-- 唤醒提示 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="唤醒提示" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label text="检测到唤醒词时的提醒方式" styleClass="info-label"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <RadioButton fx:id="wakeAlertNotificationOnly" text="仅系统通知"/>
+                            <RadioButton fx:id="wakeAlertSound" text="系统通知 + 提示音"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 安静检测（VAD） -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="安静检测（VAD）" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <CheckBox fx:id="vadEnabledCheckBox" text="启用安静检测"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="阈值（秒）" styleClass="info-label"/>
+                            <Spinner fx:id="quietThresholdSpinner" editable="true"/>
+                            <Label text="推荐 5 秒" styleClass="info-label"/>
+                        </HBox>
+                        <Label text="安静超时提醒方式" styleClass="info-label"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <RadioButton fx:id="quietAlertNotificationOnly" text="仅系统通知"/>
+                            <RadioButton fx:id="quietAlertSound" text="系统通知 + 提示音"/>
+                        </HBox>
+                        <CheckBox fx:id="quietAutoLookbackCheckBox" text="安静超时后自动扩展回溯"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="额外回溯秒数（1-60）" styleClass="info-label"/>
+                            <Spinner fx:id="quietAutoLookbackExtraSpinner" editable="true"/>
+                            <Label text="默认 8 秒" styleClass="info-label"/>
+                        </HBox>
+                        <Label text="生效规则：实际回溯会按"安静时长 + 额外秒数"动态扩大（且不小于语音回溯设置）" styleClass="info-label"/>
+                    </VBox>
+
+                    <!-- 语音回溯 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="语音回溯" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="回溯秒数（8-120）" styleClass="info-label"/>
+                            <Spinner fx:id="lookbackSecondsSpinner" editable="true"/>
+                            <Label text="推荐 12~20 秒" styleClass="info-label"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- 后台保活 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="后台保活" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <CheckBox fx:id="backgroundKeepAliveCheckBox" text="监听时启用后台保活"/>
+                        <Label text="开启后会显示持续通知，降低系统回收导致监听中断的概率。" styleClass="info-label"/>
+                    </VBox>
+
+                    <!-- 录音保存 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="录音保存" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <CheckBox fx:id="recordingSaveCheckBox" text="保存触发录音（WAV）"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="保留天数（0-30）" styleClass="info-label"/>
+                            <Spinner fx:id="recordingRetentionSpinner" editable="true"/>
+                            <Label text="推荐 7 天" styleClass="info-label"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- AI 问答 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="AI 问答" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="模型平台" styleClass="info-label"/>
+                            <ComboBox fx:id="providerComboBox" prefWidth="220"/>
+                        </HBox>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="模型名称（可选）" styleClass="info-label"/>
+                            <ComboBox fx:id="modelNameComboBox" editable="true" prefWidth="260"/>
+                        </HBox>
+                        <Label text="Access Token / API Key（加密保存）" styleClass="info-label"/>
+                        <PasswordField fx:id="tokenField" promptText="未输入则不保存"/>
+                        <VBox fx:id="secretKeyBox" spacing="4" managed="false" visible="false">
+                            <Label text="Secret Key（千帆，可选）" styleClass="info-label"/>
+                            <PasswordField fx:id="secretKeyField" promptText="千帆 Secret Key"/>
+                        </VBox>
+                    </VBox>
+
+                    <!-- 语音识别路线 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="语音识别路线" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <CheckBox fx:id="localAsrEnabledCheckBox" text="启用本机ASR模型"/>
+                        <Label text="本机模型（默认推荐中英双语快速模型）" styleClass="info-label"/>
+                        <Separator/>
+                        <CheckBox fx:id="cloudWhisperEnabledCheckBox" text="启用云端 Whisper"/>
+                        <Label text="说明：启用后将优先走云端Whisper路线；默认关闭。" styleClass="info-label"/>
+                        <VBox fx:id="speechApiKeyBox" spacing="4">
+                            <Label text="Speech API Key（加密保存）" styleClass="info-label"/>
+                            <PasswordField fx:id="speechApiKeyField" promptText="如 Groq API Key"/>
+                        </VBox>
+                    </VBox>
+
+                    <!-- 模型管理 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="模型管理" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label text="本地唤醒模型下载与选择" styleClass="info-label"/>
+                        <ComboBox fx:id="currentModelComboBox" prefWidth="360"/>
+                        <VBox fx:id="modelOptionsBox" spacing="8"/>
+                        <Label text="本地语音识别与静音模型" styleClass="info-label"/>
+                        <VBox fx:id="auxModelOptionsBox" spacing="8"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button fx:id="downloadSelectedButton" text="下载选中模型" styleClass="primary-button" onAction="#downloadSelectedModels" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="refreshModelStatusButton" text="刷新状态" styleClass="secondary-button" onAction="#refreshModelStatus" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                        </HBox>
+                        <Label fx:id="modelDownloadStatusLabel" text="" styleClass="info-label"/>
+                    </VBox>
+
+                    <!-- 开发者选项 -->
+                    <VBox spacing="8" styleClass="status-panel">
+                        <Label text="开发者选项" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <Label text="普通用户建议保持"简洁日志"；开发调试可切换"全面日志"并按分类开启" styleClass="info-label"/>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <RadioButton fx:id="logModeSimple" text="简洁日志"/>
+                            <RadioButton fx:id="logModeFull" text="全面日志"/>
+                        </HBox>
+                        <VBox fx:id="logSubCategoryBox" spacing="4" managed="false" visible="false">
+                            <CheckBox fx:id="showDiagnosticLogsCheckBox" text="监听诊断日志"/>
+                            <CheckBox fx:id="showAudioDeviceLogsCheckBox" text="音频设备日志"/>
+                            <CheckBox fx:id="showGainActivityLogsCheckBox" text="增益/语音活动日志"/>
+                            <CheckBox fx:id="showTtsSelfTestLogsCheckBox" text="TTS 自测日志"/>
+                            <CheckBox fx:id="showHeartbeatLogsCheckBox" text="心跳日志（正在监听）"/>
+                        </VBox>
+                        <CheckBox fx:id="ttsSelfTestEnabledCheckBox" text="启用 TTS 自测"/>
+                    </VBox>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+    <bottom>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+            <Button text="保存" styleClass="primary-button" onAction="#save"/>
+            <Button text="取消" styleClass="secondary-button" onAction="#cancel"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusLabel" text="" styleClass="info-label"/>
+        </HBox>
+    </bottom>
+</BorderPane>

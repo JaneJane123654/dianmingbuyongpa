@@ -9,10 +9,12 @@ import java.util.Set;
 /**
  * 用户配置信息 (User Preferences Value Object)
  *
- * <p>本类是一个不可变的值对象（Value Object），用于承载用户在界面上设置的各项参数。
+ * <p>
+ * 本类是一个不可变的值对象（Value Object），用于承载用户在界面上设置的各项参数。
  * 包含了唤醒词、静音检测配置、音频回溯时长、录音保存策略以及 AI 模型配置等信息。
  *
- * <p>通常由 {@link PreferencesManager} 构造并提供给业务逻辑使用。
+ * <p>
+ * 通常由 {@link PreferencesManager} 构造并提供给业务逻辑使用。
  *
  * @author Code Assistant
  * @date 2026-01-31
@@ -52,38 +54,37 @@ public class UserPreferences {
     private final boolean backgroundKeepAliveEnabled;
 
     private UserPreferences(
-        String keywords,
-        float kwsThreshold,
-        boolean vadEnabled,
-        int vadQuietThresholdSeconds,
-        String quietAlertMode,
-        boolean quietAutoLookbackEnabled,
-        int quietAutoLookbackExtraSeconds,
-        int audioLookbackSeconds,
-        boolean recordingSaveEnabled,
-        int recordingRetentionDays,
-        LLMConfig.ModelType aiModelType,
-        String aiModelName,
-        String aiTokenPlainText,
-        String aiSecretKey,
-        String speechApiKey,
-        boolean localAsrEnabled,
-        String localAsrModelId,
-        boolean cloudWhisperEnabled,
-        Set<String> selectedKwsModelIds,
-        String currentKwsModelId,
-        boolean asrModelSelected,
-        boolean vadModelSelected,
-        String wakeAlertMode,
-        String logMode,
-        boolean showDiagnosticLogs,
-        boolean showAudioDeviceLogs,
-        boolean showGainActivityLogs,
-        boolean showTtsSelfTestLogs,
-        boolean showHeartbeatLogs,
-        boolean ttsSelfTestEnabled,
-        boolean backgroundKeepAliveEnabled
-    ) {
+            String keywords,
+            float kwsThreshold,
+            boolean vadEnabled,
+            int vadQuietThresholdSeconds,
+            String quietAlertMode,
+            boolean quietAutoLookbackEnabled,
+            int quietAutoLookbackExtraSeconds,
+            int audioLookbackSeconds,
+            boolean recordingSaveEnabled,
+            int recordingRetentionDays,
+            LLMConfig.ModelType aiModelType,
+            String aiModelName,
+            String aiTokenPlainText,
+            String aiSecretKey,
+            String speechApiKey,
+            boolean localAsrEnabled,
+            String localAsrModelId,
+            boolean cloudWhisperEnabled,
+            Set<String> selectedKwsModelIds,
+            String currentKwsModelId,
+            boolean asrModelSelected,
+            boolean vadModelSelected,
+            String wakeAlertMode,
+            String logMode,
+            boolean showDiagnosticLogs,
+            boolean showAudioDeviceLogs,
+            boolean showGainActivityLogs,
+            boolean showTtsSelfTestLogs,
+            boolean showHeartbeatLogs,
+            boolean ttsSelfTestEnabled,
+            boolean backgroundKeepAliveEnabled) {
         this.keywords = keywords;
         this.kwsThreshold = kwsThreshold;
         this.vadEnabled = vadEnabled;
@@ -103,8 +104,8 @@ public class UserPreferences {
         this.localAsrModelId = localAsrModelId == null ? "" : localAsrModelId;
         this.cloudWhisperEnabled = cloudWhisperEnabled;
         this.selectedKwsModelIds = selectedKwsModelIds == null
-            ? Collections.emptySet()
-            : Collections.unmodifiableSet(new LinkedHashSet<>(selectedKwsModelIds));
+                ? Collections.emptySet()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(selectedKwsModelIds));
         this.currentKwsModelId = currentKwsModelId == null ? "" : currentKwsModelId.trim();
         this.asrModelSelected = asrModelSelected;
         this.vadModelSelected = vadModelSelected;
@@ -519,38 +520,37 @@ public class UserPreferences {
 
         public UserPreferences build() {
             return new UserPreferences(
-                keywords,
-                kwsThreshold,
-                vadEnabled,
-                vadQuietThresholdSeconds,
-                quietAlertMode,
-                quietAutoLookbackEnabled,
-                quietAutoLookbackExtraSeconds,
-                audioLookbackSeconds,
-                recordingSaveEnabled,
-                recordingRetentionDays,
-                aiModelType,
-                aiModelName,
-                aiTokenPlainText,
-                aiSecretKey,
-                speechApiKey,
-                localAsrEnabled,
-                localAsrModelId,
-                cloudWhisperEnabled,
-                selectedKwsModelIds,
-                currentKwsModelId,
-                asrModelSelected,
-                vadModelSelected,
-                wakeAlertMode,
-                logMode,
-                showDiagnosticLogs,
-                showAudioDeviceLogs,
-                showGainActivityLogs,
-                showTtsSelfTestLogs,
-                showHeartbeatLogs,
-                ttsSelfTestEnabled,
-                backgroundKeepAliveEnabled
-            );
+                    keywords,
+                    kwsThreshold,
+                    vadEnabled,
+                    vadQuietThresholdSeconds,
+                    quietAlertMode,
+                    quietAutoLookbackEnabled,
+                    quietAutoLookbackExtraSeconds,
+                    audioLookbackSeconds,
+                    recordingSaveEnabled,
+                    recordingRetentionDays,
+                    aiModelType,
+                    aiModelName,
+                    aiTokenPlainText,
+                    aiSecretKey,
+                    speechApiKey,
+                    localAsrEnabled,
+                    localAsrModelId,
+                    cloudWhisperEnabled,
+                    selectedKwsModelIds,
+                    currentKwsModelId,
+                    asrModelSelected,
+                    vadModelSelected,
+                    wakeAlertMode,
+                    logMode,
+                    showDiagnosticLogs,
+                    showAudioDeviceLogs,
+                    showGainActivityLogs,
+                    showTtsSelfTestLogs,
+                    showHeartbeatLogs,
+                    ttsSelfTestEnabled,
+                    backgroundKeepAliveEnabled);
         }
     }
 }
