@@ -46,17 +46,13 @@ public class CorePreferencesManager {
         logger.debug("加载用户偏好设置...");
         
         return UserPreferences.builder()
-            .llmModelType(preferences.getString(KEY_LLM_MODEL_TYPE, "openai"))
-            .llmApiKey(secureStorage.retrieveSecure(KEY_LLM_API_KEY))
-            .llmSecretKey(secureStorage.retrieveSecure(KEY_LLM_SECRET_KEY))
-            .llmBaseUrl(preferences.getString(KEY_LLM_BASE_URL, ""))
-            .llmModelName(preferences.getString(KEY_LLM_MODEL_NAME, ""))
+            .aiModelType(preferences.getString(KEY_LLM_MODEL_TYPE, "QIANFAN"))
+            .aiTokenPlainText(secureStorage.retrieveSecure(KEY_LLM_API_KEY))
+            .aiSecretKey(secureStorage.retrieveSecure(KEY_LLM_SECRET_KEY))
+            .aiModelName(preferences.getString(KEY_LLM_MODEL_NAME, ""))
             .speechApiKey(secureStorage.retrieveSecure(KEY_SPEECH_API_KEY))
-            .speechApiUrl(preferences.getString(KEY_SPEECH_API_URL, ""))
-            .wakeWord(preferences.getString(KEY_WAKE_WORD, "小助手"))
-            .silenceTimeoutMs(preferences.getInt(KEY_SILENCE_TIMEOUT, 2000))
-            .silenceThreshold(Float.parseFloat(
-                preferences.getString(KEY_SILENCE_THRESHOLD, "0.1")))
+            .keywords(preferences.getString(KEY_WAKE_WORD, "小助手"))
+            .vadQuietThresholdSeconds(preferences.getInt(KEY_SILENCE_TIMEOUT, 2000) / 1000)
             .autoStart(preferences.getBoolean(KEY_AUTO_START, false))
             .language(preferences.getString(KEY_LANGUAGE, "zh-CN"))
             .build();
@@ -69,23 +65,19 @@ public class CorePreferencesManager {
         logger.debug("保存用户偏好设置...");
         
         // 普通设置
-        preferences.putString(KEY_LLM_MODEL_TYPE, prefs.getLlmModelType());
-        preferences.putString(KEY_LLM_BASE_URL, prefs.getLlmBaseUrl());
-        preferences.putString(KEY_LLM_MODEL_NAME, prefs.getLlmModelName());
-        preferences.putString(KEY_WAKE_WORD, prefs.getWakeWord());
-        preferences.putInt(KEY_SILENCE_TIMEOUT, prefs.getSilenceTimeoutMs());
-        preferences.putString(KEY_SILENCE_THRESHOLD, 
-            String.valueOf(prefs.getSilenceThreshold()));
+        preferences.putString(KEY_LLM_MODEL_TYPE, prefs.getAiModelType());
+        preferences.putString(KEY_LLM_MODEL_NAME, prefs.getAiModelName());
+        preferences.putString(KEY_WAKE_WORD, prefs.getKeywords());
+        preferences.putInt(KEY_SILENCE_TIMEOUT, prefs.getVadQuietThresholdSeconds() * 1000);
         preferences.putBoolean(KEY_AUTO_START, prefs.isAutoStart());
         preferences.putString(KEY_LANGUAGE, prefs.getLanguage());
-        preferences.putString(KEY_SPEECH_API_URL, prefs.getSpeechApiUrl());
         
         // 敏感数据（加密存储）
-        if (prefs.getLlmApiKey() != null && !prefs.getLlmApiKey().isEmpty()) {
-            secureStorage.storeSecure(KEY_LLM_API_KEY, prefs.getLlmApiKey());
+        if (prefs.getAiTokenPlainText() != null && !prefs.getAiTokenPlainText().isEmpty()) {
+            secureStorage.storeSecure(KEY_LLM_API_KEY, prefs.getAiTokenPlainText());
         }
-        if (prefs.getLlmSecretKey() != null && !prefs.getLlmSecretKey().isEmpty()) {
-            secureStorage.storeSecure(KEY_LLM_SECRET_KEY, prefs.getLlmSecretKey());
+        if (prefs.getAiSecretKey() != null && !prefs.getAiSecretKey().isEmpty()) {
+            secureStorage.storeSecure(KEY_LLM_SECRET_KEY, prefs.getAiSecretKey());
         }
         if (prefs.getSpeechApiKey() != null && !prefs.getSpeechApiKey().isEmpty()) {
             secureStorage.storeSecure(KEY_SPEECH_API_KEY, prefs.getSpeechApiKey());

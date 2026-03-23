@@ -2,10 +2,12 @@ package com.classroomassistant.android.speech
 
 import android.content.Context
 import android.icu.text.Transliterator
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.annotation.RequiresApi
 import com.classroomassistant.android.platform.AndroidAudioRecorder
 import com.classroomassistant.android.platform.AppCrashMonitor
 import com.classroomassistant.core.audio.AudioFormatSpec
@@ -31,9 +33,6 @@ class AndroidWakeWordEngine(
     private val audioRecorder: AndroidAudioRecorder
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val hanToLatinTransliterator: Transliterator by lazy {
-        Transliterator.getInstance("Han-Latin")
-    }
     private var keywordSpotter: KeywordSpotter? = null
     private var stream: OnlineStream? = null
     private var keywordFile: File? = null
@@ -169,16 +168,22 @@ class AndroidWakeWordEngine(
                 provider = "cpu"
             }
             AppCrashMonitor.markListeningStage(context, "KWS_INIT_SPOTTER_CONFIG")
+            val effectiveKeywordThreshold = toEffectiveKeywordThreshold(keywordThreshold)
             val kwsConfig = KeywordSpotterConfig().apply {
                 featConfig = FeatureConfig(AudioFormatSpec.SAMPLE_RATE, 80, 0f)
                 this.modelConfig = modelConfig
                 maxActivePaths = 4
                 keywordsFile = activeKeywordsFile.absolutePath
-                keywordsScore = 6.0f
-                keywordsThreshold = keywordThreshold.coerceIn(0.05f, 0.9f)
+                keywordsScore = 8.0f
+                keywordsThreshold = effectiveKeywordThreshold
                 numTrailingBlanks = 0
             }
-            onLog("KWS 配置: provider=${modelConfig.provider}, threads=${modelConfig.numThreads}, score=${kwsConfig.keywordsScore}, threshold=${kwsConfig.keywordsThreshold}, trailingBlanks=${kwsConfig.numTrailingBlanks}, maxActivePaths=${kwsConfig.maxActivePaths}")
+            onLog(
+                "KWS 配置: provider=${modelConfig.provider}, threads=${modelConfig.numThreads}, " +
+                    "score=${kwsConfig.keywordsScore}, threshold=${kwsConfig.keywordsThreshold}" +
+                    "(user=${"%.2f".format(Locale.ROOT, keywordThreshold)}), " +
+                    "trailingBlanks=${kwsConfig.numTrailingBlanks}, maxActivePaths=${kwsConfig.maxActivePaths}"
+            )
             onLog("KWS 使用关键词文件: ${kwsConfig.keywordsFile}")
 
             AppCrashMonitor.markListeningStage(context, "KWS_INIT_NEW_FROM_FILE")
@@ -1330,6 +1335,11 @@ class AndroidWakeWordEngine(
                         }
                     }
                 } else {
+                    if (!audioRecorder.isRecording()) {
+                        onLog("自动切换音频源失败，且录音链路已中断，已自动停止监听，请重新开始监听")
+                        stop(onLog)
+                        return@post
+                    }
                     onLog("自动切换音频源失败，将继续使用当前音频链路")
                 }
             }
@@ -1531,9 +1541,13 @@ class AndroidWakeWordEngine(
     private fun normalizeKeywordForEngine(keyword: String, keepTone: Boolean): String {
         // 这里的归一化用于稳定中文拼音（含声调）的 token 形态，
         // 与官方 text2token 生成 keywords.txt 的目标一致，属于必要预处理。
-        val transliterated = runCatching {
-            hanToLatinTransliterator.transliterate(keyword)
-        }.getOrDefault(keyword)
+        val transliterated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                transliterateKeywordWithIcu(keyword)
+            }.getOrDefault(keyword)
+        } else {
+            keyword
+        }
 
         val normalizedTransliterated = Normalizer.normalize(transliterated, Normalizer.Form.NFC)
 
@@ -1552,6 +1566,18 @@ class AndroidWakeWordEngine(
             .lowercase(Locale.ROOT)
 
         return normalized
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun transliterateKeywordWithIcu(keyword: String): String {
+        return Transliterator.getInstance("Han-Latin").transliterate(keyword)
+    }
+
+    private fun toEffectiveKeywordThreshold(userThreshold: Float): Float {
+        val normalized = userThreshold.coerceIn(0.05f, 0.8f)
+        // 近期实机反馈存在灵敏度下降，这里做温和映射，避免必须提高说话音量。
+        val remapped = normalized * 0.72f + 0.02f
+        return remapped.coerceIn(0.08f, 0.45f)
     }
 
     private fun computeAdaptiveGain(rawRms: Float): Float {

@@ -18,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -51,6 +52,7 @@ import com.classroomassistant.android.ui.theme.ClassroomAssistantTheme
 import com.classroomassistant.core.audio.AudioFormatSpec
 import com.classroomassistant.core.ai.PromptTemplate
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -455,6 +457,70 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private data class AppRuntimeDependencies(
+    val preferences: AndroidPreferences,
+    val storage: AndroidStorage,
+    val modelManager: LocalKwsModelManager,
+    val asrModelManager: LocalAsrModelManager,
+    val asrService: AndroidSpeechRecognitionService,
+    val aiAnswerService: AndroidAiAnswerService,
+    val audioRecorder: AndroidAudioRecorder,
+    val wakeWordEngine: AndroidWakeWordEngine
+)
+
+private fun createAppRuntimeDependencies(context: Context): AppRuntimeDependencies {
+    val appContext = context.applicationContext
+    val preferences = AndroidPreferences(appContext)
+    val storage = AndroidStorage(appContext)
+    val modelManager = LocalKwsModelManager(appContext, storage)
+    val asrModelManager = LocalAsrModelManager(appContext, storage)
+    val asrService = AndroidSpeechRecognitionService(asrModelManager)
+    val aiAnswerService = AndroidAiAnswerService()
+    val audioRecorder = AndroidAudioRecorder(appContext)
+    val wakeWordEngine = AndroidWakeWordEngine(appContext, audioRecorder)
+    return AppRuntimeDependencies(
+        preferences = preferences,
+        storage = storage,
+        modelManager = modelManager,
+        asrModelManager = asrModelManager,
+        asrService = asrService,
+        aiAnswerService = aiAnswerService,
+        audioRecorder = audioRecorder,
+        wakeWordEngine = wakeWordEngine
+    )
+}
+
+@Composable
+private fun AppStartupFailureScreen(message: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("应用启动失败", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun PendingCrashSummaryCard(summary: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("检测到上次异常退出", style = MaterialTheme.typography.titleMedium)
+            Text(summary, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
 /**
  * 应用导航
  */
@@ -465,14 +531,39 @@ fun AppNavigation(
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
-    val preferences = remember { AndroidPreferences(context.applicationContext) }
-    val storage = remember { AndroidStorage(context.applicationContext) }
+    val runtimeDependenciesResult = remember(context.applicationContext) {
+        runCatching {
+            createAppRuntimeDependencies(context.applicationContext)
+        }
+    }
+    val runtimeDependencies = runtimeDependenciesResult.getOrNull()
+    val runtimeInitError = runtimeDependenciesResult.exceptionOrNull()
+
+    LaunchedEffect(runtimeInitError) {
+        if (runtimeInitError != null) {
+            AppCrashMonitor.recordHandledError(
+                context.applicationContext,
+                "应用启动依赖初始化失败",
+                runtimeInitError
+            )
+        }
+    }
+
+    if (runtimeDependencies == null) {
+        AppStartupFailureScreen(
+            message = runtimeInitError?.message ?: "启动阶段发生未知异常，请重新运行并查看日志"
+        )
+        return
+    }
+
+    val preferences = runtimeDependencies.preferences
+    val storage = runtimeDependencies.storage
     val coroutineScope = rememberCoroutineScope()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val modelManager = remember { LocalKwsModelManager(context.applicationContext, storage) }
-    val asrModelManager = remember { LocalAsrModelManager(context.applicationContext, storage) }
-    val asrService = remember { AndroidSpeechRecognitionService(asrModelManager) }
-    val aiAnswerService = remember { AndroidAiAnswerService() }
+    val modelManager = runtimeDependencies.modelManager
+    val asrModelManager = runtimeDependencies.asrModelManager
+    val asrService = runtimeDependencies.asrService
+    val aiAnswerService = runtimeDependencies.aiAnswerService
     val availableModels = remember { modelManager.getAvailableModels() }
     val defaultModelId = remember { modelManager.getDefaultModelId() }
     val savedModelId = remember { preferences.getString(KEY_KWS_MODEL_ID, defaultModelId) ?: defaultModelId }
@@ -519,8 +610,8 @@ fun AppNavigation(
         mutableStateOf(availableAsrModels.associate { it.id to "" })
     }
     var isDownloadingAsr by remember { mutableStateOf(false) }
-    val audioRecorder = remember { AndroidAudioRecorder(context.applicationContext) }
-    val wakeWordEngine = remember { AndroidWakeWordEngine(context.applicationContext, audioRecorder) }
+    val audioRecorder = runtimeDependencies.audioRecorder
+    val wakeWordEngine = runtimeDependencies.wakeWordEngine
     var isMonitoring by remember { mutableStateOf(false) }
     var isStarting by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("空闲") }
@@ -577,9 +668,20 @@ fun AppNavigation(
             }
         }
         coroutineScope.launch(Dispatchers.IO) {
-            val logFile = File(storage.getLogsDir(), "app.log")
-            logFile.parentFile?.mkdirs()
-            logFile.appendText("$line\n")
+            try {
+                val logFile = File(storage.getLogsDir(), "app.log")
+                logFile.parentFile?.mkdirs()
+                logFile.appendText("$line\n")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "写入应用日志失败", e)
+                AppCrashMonitor.recordHandledError(
+                    context.applicationContext,
+                    "写入应用日志失败",
+                    e
+                )
+            }
         }
     }
 
@@ -587,6 +689,14 @@ fun AppNavigation(
         if (shouldDisplayEngineLog(message, settings)) {
             appendLog(message)
         }
+    }
+
+    fun startKeepAliveIfEnabled(): Boolean {
+        val result = ListeningKeepAliveService.start(context.applicationContext)
+        result.exceptionOrNull()?.let { error ->
+            appendLog("后台保活启动失败: ${error.message ?: error.javaClass.simpleName}")
+        }
+        return result.isSuccess
     }
 
     fun clearLogs() {
@@ -1032,7 +1142,7 @@ fun AppNavigation(
             appendLog("VAD 已关闭")
         }
         if (startSettings.backgroundKeepAliveEnabled) {
-            ListeningKeepAliveService.start(context.applicationContext)
+            startKeepAliveIfEnabled()
             appendLog("后台保活已启用")
         }
         val modelDir = modelManager.getModelDir(currentModelId)
@@ -1166,7 +1276,7 @@ fun AppNavigation(
         appendLog("检测到设置变更，正在重初始化监听并保持持续监听")
         wakeWordEngine.stop { appendLog(it) }
         if (updatedSettings.backgroundKeepAliveEnabled) {
-            ListeningKeepAliveService.start(context.applicationContext)
+            startKeepAliveIfEnabled()
         } else {
             ListeningKeepAliveService.stop(context.applicationContext)
         }
@@ -1252,47 +1362,80 @@ fun AppNavigation(
     }
 
     LaunchedEffect(logVersion) {
-        withContext(Dispatchers.IO) {
-            val logFile = File(storage.getLogsDir(), "app.log")
-            val text = if (logFile.exists()) {
-                val lines = logFile.readLines()
-                val tail = if (lines.size > 500) lines.takeLast(500) else lines
-                tail.joinToString("\n")
-            } else {
-                ""
+        try {
+            val text = withContext(Dispatchers.IO) {
+                val logFile = File(storage.getLogsDir(), "app.log")
+                if (logFile.exists()) {
+                    val lines = logFile.readLines()
+                    val tail = if (lines.size > 500) lines.takeLast(500) else lines
+                    tail.joinToString("\n")
+                } else {
+                    ""
+                }
             }
             withContext(Dispatchers.Main) {
                 logText = if (text.isBlank()) "日志输出..." else text
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppCrashMonitor.recordHandledError(
+                context.applicationContext,
+                "读取应用日志失败",
+                e
+            )
+            logText = "日志读取失败：${e.message ?: "未知错误"}"
         }
     }
 
     LaunchedEffect(Unit) {
-        val migrated = withContext(Dispatchers.IO) {
-            modelManager.migrateLegacyModelIfNeeded(currentModelId)
-        }
-        if (migrated) {
-            refreshModelStatus()
+        try {
+            val migrated = withContext(Dispatchers.IO) {
+                modelManager.migrateLegacyModelIfNeeded(currentModelId)
+            }
+            if (migrated) {
+                refreshModelStatus()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppCrashMonitor.recordHandledError(
+                context.applicationContext,
+                "迁移旧版KWS模型失败",
+                e
+            )
+            appendLog("迁移旧版KWS模型失败: ${e.message ?: "未知错误"}")
         }
     }
 
     LaunchedEffect(settings.localAsrEnabled, settings.localAsrModelId) {
-        val modelId = settings.localAsrModelId.ifBlank { defaultAsrModelId }
-        if (!settings.localAsrEnabled) {
-            appendLog("本机ASR已关闭：默认不下载本地识别模型")
-            return@LaunchedEffect
-        }
-        if (lastAutoDownloadedAsrModelId == modelId) {
-            return@LaunchedEffect
-        }
-        if (asrModelManager.isModelReady(modelId)) {
-            refreshAsrModelStatus()
+        try {
+            val modelId = settings.localAsrModelId.ifBlank { defaultAsrModelId }
+            if (!settings.localAsrEnabled) {
+                appendLog("本机ASR已关闭：默认不下载本地识别模型")
+                return@LaunchedEffect
+            }
+            if (lastAutoDownloadedAsrModelId == modelId) {
+                return@LaunchedEffect
+            }
+            if (asrModelManager.isModelReady(modelId)) {
+                refreshAsrModelStatus()
+                lastAutoDownloadedAsrModelId = modelId
+                appendLog("本机ASR模型已就绪：$modelId，跳过默认下载")
+                return@LaunchedEffect
+            }
             lastAutoDownloadedAsrModelId = modelId
-            appendLog("本机ASR模型已就绪：$modelId，跳过默认下载")
-            return@LaunchedEffect
+            downloadAsrModel(modelId, "首次启用本机ASR默认下载")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppCrashMonitor.recordHandledError(
+                context.applicationContext,
+                "自动检查本机ASR模型失败",
+                e
+            )
+            appendLog("自动检查本机ASR模型失败: ${e.message ?: "未知错误"}")
         }
-        lastAutoDownloadedAsrModelId = modelId
-        downloadAsrModel(modelId, "首次启用本机ASR默认下载")
     }
 
     DisposableEffect(Unit) {
@@ -1316,9 +1459,6 @@ fun AppNavigation(
                 isMonitoring = isMonitoring,
                 isStarting = isStarting,
                 statusText = statusText,
-                onSetMonitoring = { isMonitoring = it },
-                onSetStarting = { isStarting = it },
-                onSetStatusText = { statusText = it },
                 onClearLogs = { clearLogs() },
                 currentModelName = availableModels.firstOrNull { it.id == currentModelId }?.name ?: currentModelId,
                 currentModelStatus = modelStatusMap[currentModelId] ?: "未下载",
@@ -1336,7 +1476,7 @@ fun AppNavigation(
                     stopMonitoringSession("停止监听")
                 },
                 onAppendLog = { appendLog(it) },
-                wakeWordEngine = wakeWordEngine
+                topExtraContent = {}
             )
         }
         composable("settings") {
@@ -1358,7 +1498,7 @@ fun AppNavigation(
                     appendLog("保存设置成功（唤醒词触发值=${String.format("%.2f", normalizedSettings.kwsThreshold)}）")
                     if (wasListening) {
                         if (normalizedSettings.backgroundKeepAliveEnabled) {
-                            ListeningKeepAliveService.start(context.applicationContext)
+                            startKeepAliveIfEnabled()
                         } else {
                             ListeningKeepAliveService.stop(context.applicationContext)
                         }
@@ -1404,9 +1544,6 @@ fun MainScreen(
     isMonitoring: Boolean,
     isStarting: Boolean,
     statusText: String,
-    onSetMonitoring: (Boolean) -> Unit,
-    onSetStarting: (Boolean) -> Unit,
-    onSetStatusText: (String) -> Unit,
     onClearLogs: () -> Unit,
     currentModelName: String,
     currentModelStatus: String,
@@ -1422,7 +1559,7 @@ fun MainScreen(
     onRunTtsSelfTest: () -> Unit,
     onStopMonitoring: () -> Unit,
     onAppendLog: (String) -> Unit,
-    wakeWordEngine: AndroidWakeWordEngine
+    topExtraContent: @Composable (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -1468,259 +1605,269 @@ fun MainScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            topExtraContent?.let { content -> item { content() } }
             // 状态卡片
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "当前状态",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    val displayStatus = when {
-                        isDownloading && !currentModelReady -> "下载模型中..."
-                        !hasKeywords && !isMonitoring -> "请先设置唤醒词"
-                        else -> statusText
-                    }
-                    Text(
-                        text = displayStatus,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = if (isMonitoring) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "当前模型：$currentModelName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "唤醒词：$keywordsDisplay",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (hasKeywords) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "模型状态：$currentModelStatus",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (currentModelStatus == "失败" && currentModelFailureReason.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "失败原因：$currentModelFailureReason",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    if (!currentModelReady && currentModelProgress > 0f) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        LinearProgressIndicator(
-                            progress = { currentModelProgress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 控制按钮
-            Button(
-                onClick = {
-                    if (isMonitoring) {
-                        onStopMonitoring()
-                        return@Button
-                    }
-                    onStartMonitoring()
-                },
-                enabled = !isDownloading && !isStarting && (hasKeywords || isMonitoring),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isMonitoring)
-                        MaterialTheme.colorScheme.error
-                    else
-                        MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text(
-                    text = if (isMonitoring) "监听中（点击停止）" else if (isStarting) "初始化中..." else if (isDownloading) "下载模型中..." else "开始监听",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = { onRunTtsSelfTest() },
-                enabled = isMonitoring && !isStarting && !isDownloading && hasKeywords,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("运行 TTS 综合自测")
-            }
-            if (!hasKeywords) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "提示：请先在设置中填写唤醒词，再开始监听",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            if (isDownloading) {
-                Spacer(modifier = Modifier.height(10.dp))
-                LinearProgressIndicator(
+            item {
+                Card(
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "最近识别文本",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = if (recognitionText.isBlank()) "暂无" else recognitionText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "AI 直接问答",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = directQuestion,
-                        onValueChange = { directQuestion = it },
-                        label = { Text("输入你的问题") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val question = directQuestion
-                                directQuestion = ""
-                                onSendDirectQuestion(question)
-                            },
-                            enabled = directQuestion.isNotBlank() && !isAiAnswering,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(if (isAiAnswering) "问答中..." else "发送")
-                        }
-                        OutlinedButton(
-                            onClick = { directQuestion = "" },
-                            enabled = directQuestion.isNotBlank(),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("清空")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "AI 回答",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = if (aiAnswerText.isBlank()) "暂无" else aiAnswerText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 日志区域
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 240.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
-                            text = "运行日志",
+                            text = "当前状态",
                             style = MaterialTheme.typography.titleMedium
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    if (logText.isBlank() || logText == "日志输出...") {
-                                        Toast.makeText(context, "暂无日志可复制", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        clipboardManager.setText(AnnotatedString(logText))
-                                        Toast.makeText(context, "日志已复制", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            ) {
-                                Text("复制日志")
-                            }
-                            OutlinedButton(
-                                onClick = { onClearLogs() }
-                            ) {
-                                Text("清空日志")
-                            }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val displayStatus = when {
+                            isDownloading && !currentModelReady -> "下载模型中..."
+                            !hasKeywords && !isMonitoring -> "请先设置唤醒词"
+                            else -> statusText
+                        }
+                        Text(
+                            text = displayStatus,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = if (isMonitoring)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "当前模型：$currentModelName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "唤醒词：$keywordsDisplay",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (hasKeywords) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "模型状态：$currentModelStatus",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (currentModelStatus == "失败" && currentModelFailureReason.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "失败原因：$currentModelFailureReason",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        if (!currentModelReady && currentModelProgress > 0f) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { currentModelProgress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = logText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // 控制按钮
+            item {
+                Button(
+                    onClick = {
+                        if (isMonitoring) {
+                            onStopMonitoring()
+                            return@Button
+                        }
+                        onStartMonitoring()
+                    },
+                    enabled = !isDownloading && !isStarting && (hasKeywords || isMonitoring),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isMonitoring)
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        text = if (isMonitoring) "监听中（点击停止）" else if (isStarting) "初始化中..." else if (isDownloading) "下载模型中..." else "开始监听",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { onRunTtsSelfTest() },
+                    enabled = isMonitoring && !isStarting && !isDownloading && hasKeywords,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("运行 TTS 综合自测")
+                }
+                if (!hasKeywords) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "提示：请先在设置中填写唤醒词，再开始监听",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (isDownloading) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // 识别文本 + AI问答卡片
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "最近识别文本",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (recognitionText.isBlank()) "暂无" else recognitionText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "AI 直接问答",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = directQuestion,
+                            onValueChange = { directQuestion = it },
+                            label = { Text("输入你的问题") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val question = directQuestion
+                                    directQuestion = ""
+                                    onSendDirectQuestion(question)
+                                },
+                                enabled = directQuestion.isNotBlank() && !isAiAnswering,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (isAiAnswering) "问答中..." else "发送")
+                            }
+                            OutlinedButton(
+                                onClick = { directQuestion = "" },
+                                enabled = directQuestion.isNotBlank(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("清空")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "AI 回答",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (aiAnswerText.isBlank()) "暂无" else aiAnswerText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // 日志区域
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 240.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "运行日志",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (logText.isBlank() || logText == "日志输出...") {
+                                            Toast.makeText(context, "暂无日志可复制", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            clipboardManager.setText(AnnotatedString(logText))
+                                            Toast.makeText(context, "日志已复制", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Text("复制日志")
+                                }
+                                OutlinedButton(
+                                    onClick = { onClearLogs() }
+                                ) {
+                                    Text("清空日志")
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            Text(
+                                text = logText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // 设置按钮
-            OutlinedButton(
-                onClick = {
-                    onAppendLog("点击设置")
-                    onNavigateToSettings()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("设置")
+            item {
+                OutlinedButton(
+                    onClick = {
+                        onAppendLog("点击设置")
+                        onNavigateToSettings()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("设置")
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.classroomassistant.android.platform.AppCrashMonitor
 
 class ListeningKeepAliveService : Service() {
 
@@ -60,15 +61,20 @@ class ListeningKeepAliveService : Service() {
         private const val NOTIFICATION_ID = 12001
         private const val ACTION_START = "com.classroomassistant.android.action.START_KEEPALIVE"
 
-        fun start(context: Context) {
-            val intent = Intent(context, ListeningKeepAliveService::class.java).apply {
-                action = ACTION_START
+        fun start(context: Context): Result<Unit> {
+            val appContext = context.applicationContext
+            return runCatching {
+                val intent = Intent(appContext, ListeningKeepAliveService::class.java).apply {
+                    action = ACTION_START
+                }
+                ContextCompat.startForegroundService(appContext, intent)
+            }.onFailure { throwable ->
+                AppCrashMonitor.recordHandledError(appContext, "启动后台保活服务失败", throwable)
             }
-            ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, ListeningKeepAliveService::class.java))
+            context.applicationContext.stopService(Intent(context.applicationContext, ListeningKeepAliveService::class.java))
         }
     }
 }

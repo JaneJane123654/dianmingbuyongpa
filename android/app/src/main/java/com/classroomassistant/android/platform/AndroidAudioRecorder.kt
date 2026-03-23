@@ -52,6 +52,12 @@ class AndroidAudioRecorder(private val context: Context) : PlatformAudioRecorder
             return false
         }
 
+        val currentIndex = if (activeSourceIndex >= 0) {
+            activeSourceIndex
+        } else {
+            0
+        }
+
         val nextIndex = if (activeSourceIndex >= 0) {
             (activeSourceIndex + 1) % sourceCandidates.size
         } else {
@@ -59,7 +65,14 @@ class AndroidAudioRecorder(private val context: Context) : PlatformAudioRecorder
         }
 
         stop()
-        return startWithPreferredIndex(listener, nextIndex)
+        val switched = startWithPreferredIndex(listener, nextIndex)
+        if (switched) {
+            return true
+        }
+
+        // 切换失败时尽量回退到上一可用音频源，避免引擎处于“看似运行、实际无录音”的状态。
+        listener.onError("切换音频源失败，尝试回退到上一音频源")
+        return startWithPreferredIndex(listener, currentIndex.coerceIn(0, sourceCandidates.size - 1))
     }
 
     override fun stop() {

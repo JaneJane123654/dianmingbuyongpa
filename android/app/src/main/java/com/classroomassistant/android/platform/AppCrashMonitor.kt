@@ -73,11 +73,14 @@ object AppCrashMonitor {
         if (crashFile.exists()) {
             val text = crashFile.readText().trim()
             crashFile.delete()
-            return if (text.isNotBlank()) {
-                "检测到上次异常退出，摘要如下：\n$text"
-            } else {
-                null
+            if (text.isNotBlank()) {
+                // 只提取前几行关键信息（时间/线程/异常/信息/阶段），跳过完整堆栈
+                val summary = text.lines()
+                    .filter { it.startsWith("时间:") || it.startsWith("线程:") || it.startsWith("异常:") || it.startsWith("信息:") || it.startsWith("阶段:") || it.startsWith("类型:") }
+                    .joinToString("  ")
+                return "上次异常退出：$summary"
             }
+            return null
         }
         val stage = readStage(appContext)
         if (!stage.isNullOrBlank()) {
@@ -85,9 +88,10 @@ object AppCrashMonitor {
             clearListeningStage(appContext)
             clearStageTrace(appContext)
             return if (trace.isBlank()) {
-                "检测到上次在监听阶段异常退出：$stage"
+                "上次异常退出，末阶段：$stage"
             } else {
-                "检测到上次在监听阶段异常退出：$stage\n阶段链路:\n$trace"
+                val lastSteps = trace.lines().takeLast(3).joinToString(" → ") { it.substringAfterLast('|') }
+                "上次异常退出，末阶段：${stage.substringAfterLast('|')}（近期：$lastSteps）"
             }
         }
         return null
