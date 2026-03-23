@@ -26,11 +26,13 @@ import org.slf4j.LoggerFactory;
 /**
  * 桌面端设置页面控制器
  *
- * <p>与安卓端 SettingsScreen 保持功能对齐，使用 {@link PlatformPreferences} 和
+ * <p>
+ * 与安卓端 SettingsScreen 保持功能对齐，使用 {@link PlatformPreferences} 和
  * {@link PlatformSecureStorage} (core 模块接口) 进行配置持久化，
  * 无需依赖 src 模块的 PreferencesManager。
  *
- * <p>偏好Key名称与安卓端/src端完全一致，确保跨平台配置可读性。
+ * <p>
+ * 偏好Key名称与安卓端/src端完全一致，确保跨平台配置可读性。
  *
  * @author Code Assistant
  * @date 2026-02-01
@@ -76,11 +78,10 @@ public class DesktopSettingsController {
 
     /** 各 AI 平台的推荐模型名称映射，与安卓端 SettingsScreen 一致 */
     private static final Map<AiProvider, List<String>> MODEL_NAME_SUGGESTIONS = Map.of(
-        AiProvider.OPENAI, List.of("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"),
-        AiProvider.DEEPSEEK, List.of("deepseek-chat", "deepseek-reasoner"),
-        AiProvider.KIMI, List.of("moonshot-v1-8k", "moonshot-v1-32k"),
-        AiProvider.QIANFAN, List.of("ernie-4.0-8k", "ernie-3.5-8k")
-    );
+            AiProvider.OPENAI, List.of("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"),
+            AiProvider.DEEPSEEK, List.of("deepseek-chat", "deepseek-reasoner"),
+            AiProvider.KIMI, List.of("moonshot-v1-8k", "moonshot-v1-32k"),
+            AiProvider.QIANFAN, List.of("ernie-4.0-8k", "ernie-3.5-8k"));
 
     private final DesktopPlatformProvider platformProvider;
     private final PlatformPreferences prefs;
@@ -92,64 +93,104 @@ public class DesktopSettingsController {
     private final ToggleGroup logModeToggleGroup = new ToggleGroup();
 
     // ── 唤醒词 ──────────────────────────────────────────────────────────
-    @FXML private javafx.scene.control.TextField keywordsField;
-    @FXML private Slider kwsThresholdSlider;
-    @FXML private Label kwsThresholdLabel;
+    @FXML
+    private javafx.scene.control.TextField keywordsField;
+    @FXML
+    private Slider kwsThresholdSlider;
+    @FXML
+    private Label kwsThresholdLabel;
 
     // ── 唤醒提示 ────────────────────────────────────────────────────────
-    @FXML private RadioButton wakeAlertNotificationOnly;
-    @FXML private RadioButton wakeAlertSound;
+    @FXML
+    private RadioButton wakeAlertNotificationOnly;
+    @FXML
+    private RadioButton wakeAlertSound;
 
     // ── 安静检测（VAD）──────────────────────────────────────────────────
-    @FXML private CheckBox vadEnabledCheckBox;
-    @FXML private Spinner<Integer> quietThresholdSpinner;
-    @FXML private RadioButton quietAlertNotificationOnly;
-    @FXML private RadioButton quietAlertSound;
-    @FXML private CheckBox quietAutoLookbackCheckBox;
-    @FXML private Spinner<Integer> quietAutoLookbackExtraSpinner;
+    @FXML
+    private CheckBox vadEnabledCheckBox;
+    @FXML
+    private Spinner<Integer> quietThresholdSpinner;
+    @FXML
+    private RadioButton quietAlertNotificationOnly;
+    @FXML
+    private RadioButton quietAlertSound;
+    @FXML
+    private CheckBox quietAutoLookbackCheckBox;
+    @FXML
+    private Spinner<Integer> quietAutoLookbackExtraSpinner;
 
     // ── 语音回溯 ────────────────────────────────────────────────────────
-    @FXML private Spinner<Integer> lookbackSecondsSpinner;
+    @FXML
+    private Spinner<Integer> lookbackSecondsSpinner;
 
     // ── 录音保存 ────────────────────────────────────────────────────────
-    @FXML private CheckBox recordingSaveCheckBox;
-    @FXML private Spinner<Integer> recordingRetentionSpinner;
+    @FXML
+    private CheckBox recordingSaveCheckBox;
+    @FXML
+    private Spinner<Integer> recordingRetentionSpinner;
 
     // ── AI 问答 ─────────────────────────────────────────────────────────
-    @FXML private ComboBox<AiProvider> providerComboBox;
-    @FXML private ComboBox<String> modelNameComboBox;
-    @FXML private PasswordField tokenField;
-    @FXML private VBox secretKeyBox;
-    @FXML private PasswordField secretKeyField;
+    @FXML
+    private ComboBox<AiProvider> providerComboBox;
+    @FXML
+    private ComboBox<String> modelNameComboBox;
+    @FXML
+    private PasswordField tokenField;
+    @FXML
+    private VBox secretKeyBox;
+    @FXML
+    private PasswordField secretKeyField;
 
     // ── 语音识别路线 ────────────────────────────────────────────────────
-    @FXML private CheckBox localAsrEnabledCheckBox;
-    @FXML private CheckBox cloudWhisperEnabledCheckBox;
-    @FXML private VBox speechApiKeyBox;
-    @FXML private PasswordField speechApiKeyField;
+    @FXML
+    private CheckBox localAsrEnabledCheckBox;
+    @FXML
+    private CheckBox cloudWhisperEnabledCheckBox;
+    @FXML
+    private VBox speechApiKeyBox;
+    @FXML
+    private PasswordField speechApiKeyField;
 
     // ── 开发者选项 ──────────────────────────────────────────────────────
-    @FXML private RadioButton logModeSimple;
-    @FXML private RadioButton logModeFull;
-    @FXML private VBox logSubCategoryBox;
-    @FXML private CheckBox showDiagnosticLogsCheckBox;
-    @FXML private CheckBox showAudioDeviceLogsCheckBox;
-    @FXML private CheckBox showGainActivityLogsCheckBox;
-    @FXML private CheckBox showTtsSelfTestLogsCheckBox;
-    @FXML private CheckBox showHeartbeatLogsCheckBox;
-    @FXML private CheckBox ttsSelfTestEnabledCheckBox;
+    @FXML
+    private RadioButton logModeSimple;
+    @FXML
+    private RadioButton logModeFull;
+    @FXML
+    private VBox logSubCategoryBox;
+    @FXML
+    private CheckBox showDiagnosticLogsCheckBox;
+    @FXML
+    private CheckBox showAudioDeviceLogsCheckBox;
+    @FXML
+    private CheckBox showGainActivityLogsCheckBox;
+    @FXML
+    private CheckBox showTtsSelfTestLogsCheckBox;
+    @FXML
+    private CheckBox showHeartbeatLogsCheckBox;
+    @FXML
+    private CheckBox ttsSelfTestEnabledCheckBox;
     // ── 后台保活 ──────────────────────────────────────────────────────────
-    @FXML private CheckBox backgroundKeepAliveCheckBox;
+    @FXML
+    private CheckBox backgroundKeepAliveCheckBox;
     // ── 通用 ────────────────────────────────────────────────────────────
-    @FXML private Label statusLabel;
+    @FXML
+    private Label statusLabel;
 
     // ── 模型管理区（桌面端精简版，无 ModelDownloadManager）──
-    @FXML private ComboBox<?> currentModelComboBox;
-    @FXML private VBox modelOptionsBox;
-    @FXML private VBox auxModelOptionsBox;
-    @FXML private Button downloadSelectedButton;
-    @FXML private Button refreshModelStatusButton;
-    @FXML private Label modelDownloadStatusLabel;
+    @FXML
+    private ComboBox<?> currentModelComboBox;
+    @FXML
+    private VBox modelOptionsBox;
+    @FXML
+    private VBox auxModelOptionsBox;
+    @FXML
+    private Button downloadSelectedButton;
+    @FXML
+    private Button refreshModelStatusButton;
+    @FXML
+    private Label modelDownloadStatusLabel;
 
     /**
      * 构造桌面端设置控制器
