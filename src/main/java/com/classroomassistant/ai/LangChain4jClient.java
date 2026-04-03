@@ -10,6 +10,7 @@ import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.qianfan.QianfanChatModel;
 import dev.langchain4j.model.qianfan.QianfanStreamingChatModel;
 import java.util.EnumMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -67,7 +68,19 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         this.circuitBreaker = new CircuitBreaker(Math.max(1, config.getMaxRetryCount()), java.time.Duration.ofSeconds(10));
         this.maxRetryCount = Math.max(0, config.getMaxRetryCount());
         this.chatModel = createModel(config);
-        this.streamingModel = config.isStreaming() ? createStreamingModel(config) : null;
+        if (config.isStreaming()) {
+            try {
+                this.streamingModel = createStreamingModel(config);
+            } catch (RuntimeException e) {
+                this.streamingModel = null;
+                logger.warn("[AI_STREAM_FALLBACK] 流式模型初始化失败，将自动降级为非流式调用，模型类型={}, 模型名称={}, 错误={}",
+                    config.getModelType(),
+                    config.getModelName(),
+                    e.getMessage());
+            }
+        } else {
+            this.streamingModel = null;
+        }
     }
 
     /**
@@ -85,6 +98,10 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         if (!circuitBreaker.allowRequest()) {
             return "";
         }
+        return generateAnswerWithRetry(prompt);
+    }
+
+    private String generateAnswerWithRetry(String prompt) {
         RuntimeException lastError = null;
         for (int attempt = 0; attempt <= maxRetryCount; attempt++) {
             try {
@@ -361,60 +378,158 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
                 AtomicBoolean hasToken = new AtomicBoolean(false);
                 AtomicReference<Throwable> error = new AtomicReference<>();
                 StringBuilder buffer = new StringBuilder();
-                streamingModel.generate(prompt, new StreamingResponseHandler<AiMessage>() {
-                    @Override
-                    public void onNext(String token) {
-                        if (token == null) {
-                            return;
+                try {
+                    streamingModel.generate(prompt, new StreamingResponseHandler<AiMessage>() {
+                        @Override
+                        public void onNext(String token) {
+                            if (token == null) {
+                                return;
+                            }
+                            hasToken.set(true);
+                            buffer.append(token);
+                            listener.onToken(token);
                         }
-                        hasToken.set(true);
-                        buffer.append(token);
-                        listener.onToken(token);
-                    }
 
-                    @Override
-                    public void onComplete(Response<AiMessage> response) {
-                        String answer = resolveAnswer(response, buffer);
-                        listener.onComplete(answer);
-                        done.countDown();
-                    }
+                        @Override
+                        public void onComplete(Response<AiMessage> response) {
+                            String answer = resolveAnswer(response, buffer);
+                            listener.onComplete(answer);
+                            done.countDown();
+                        }
 
-                    @Override
-                    public void onError(Throwable throwable) {
-                        error.set(throwable);
-                        done.countDown();
-                    }
-                });
+                        @Override
+                        public void onError(Throwable throwable) {
+                            error.set(throwable);
+                            done.countDown();
+                        }
+                    });
+                } catch (Throwable throwable) {
+                    error.set(throwable);
+                    done.countDown();
+                }
 
                 boolean finished = awaitCompletion(done);
                 if (!finished) {
                     error.compareAndSet(null, new IllegalStateException("模型流式响应超时"));
                 }
 
-                if (error.get() == null) {
+                Throwable currentError = error.get();
+                if (currentError == null) {
                     circuitBreaker.recordSuccess();
                     return;
                 }
 
                 circuitBreaker.recordFailure();
-                lastError = new RuntimeException(error.get());
-                logModelError("流式调用", attempt + 1, error.get());
-                if (hasToken.get() || attempt >= maxRetryCount) {
-                    logger.error("[AI_SERVICE_FAILED] 模型流式调用失败，模型类型={}, 模型名称={}, 已收到Token={}, 错误={}",
+                lastError = new RuntimeException(currentError);
+                logModelError("流式调用", attempt + 1, currentError);
+
+                boolean fallbackByUnsupportedStream = shouldFallbackToNonStreaming(currentError);
+                if (fallbackByUnsupportedStream) {
+                    logger.info("[AI_STREAM_FALLBACK] 检测到模型可能不支持流式输出，自动降级为非流式调用，模型类型={}, 模型名称={}",
                         config != null ? config.getModelType() : "null",
-                        config != null ? config.getModelName() : "null",
-                        hasToken.get(),
-                        error.get().getMessage());
-                    listener.onError("模型调用失败: " + error.get().getMessage());
+                        config != null ? config.getModelName() : "null");
+                }
+
+                boolean shouldRetryStreaming = !hasToken.get() && attempt < maxRetryCount && !fallbackByUnsupportedStream;
+                if (shouldRetryStreaming) {
+                    sleepRetry();
+                    continue;
+                }
+
+                boolean emitTokens = !hasToken.get();
+                if (completeWithNonStreamingFallback(prompt, listener, emitTokens)) {
                     return;
                 }
-                sleepRetry();
+
+                if (hasToken.get()) {
+                    listener.onComplete(buffer.toString());
+                    return;
+                }
+
+                logger.error("[AI_SERVICE_FAILED] 模型流式调用失败且降级失败，模型类型={}, 模型名称={}, 已收到Token={}, 错误={}",
+                    config != null ? config.getModelType() : "null",
+                    config != null ? config.getModelName() : "null",
+                    hasToken.get(),
+                    currentError.getMessage());
+                listener.onError("模型调用失败: " + currentError.getMessage());
+                return;
+            }
+
+            if (completeWithNonStreamingFallback(prompt, listener, true)) {
+                return;
             }
             logger.error("[AI_SERVICE_FAILED] 模型流式调用耗尽重试次数，模型类型={}, 模型名称={}",
                 config != null ? config.getModelType() : "null",
                 config != null ? config.getModelName() : "null");
             listener.onError(lastError == null ? "模型调用失败" : "模型调用失败: " + lastError.getMessage());
         });
+    }
+
+    private boolean completeWithNonStreamingFallback(String prompt, AnswerListener listener, boolean emitTokens) {
+        try {
+            String answer = generateAnswerWithRetry(prompt);
+            if (answer == null) {
+                answer = "";
+            }
+            if (emitTokens && !answer.isBlank()) {
+                for (String token : answer.split("")) {
+                    listener.onToken(token);
+                }
+            }
+            listener.onComplete(answer);
+            return true;
+        } catch (RuntimeException e) {
+            logger.warn("[AI_STREAM_FALLBACK] 非流式降级失败，模型类型={}, 模型名称={}, 错误={}",
+                config != null ? config.getModelType() : "null",
+                config != null ? config.getModelName() : "null",
+                e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean shouldFallbackToNonStreaming(Throwable throwable) {
+        String message = flattenThrowableMessages(throwable).toLowerCase(Locale.ROOT);
+        if (message.isBlank()) {
+            return false;
+        }
+        boolean streamHint = message.contains("stream")
+            || message.contains("sse")
+            || message.contains("text/event-stream")
+            || message.contains("流式")
+            || message.contains("流输出");
+        if (!streamHint) {
+            return false;
+        }
+        return message.contains("not support")
+            || message.contains("unsupported")
+            || message.contains("does not support")
+            || message.contains("not implemented")
+            || message.contains("invalid parameter")
+            || message.contains("unknown parameter")
+            || message.contains("must be false")
+            || message.contains("should be false")
+            || message.contains("unrecognized request argument supplied: stream")
+            || message.contains("不支持")
+            || message.contains("未实现")
+            || message.contains("参数错误");
+    }
+
+    private String flattenThrowableMessages(Throwable throwable) {
+        StringBuilder buffer = new StringBuilder();
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth < 8) {
+            String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                if (buffer.length() > 0) {
+                    buffer.append(" | ");
+                }
+                buffer.append(message);
+            }
+            current = current.getCause();
+            depth++;
+        }
+        return buffer.toString();
     }
 
     /**

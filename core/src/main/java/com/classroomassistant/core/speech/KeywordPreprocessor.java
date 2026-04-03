@@ -15,7 +15,8 @@ import org.slf4j.LoggerFactory;
 /**
  * 唤醒词预处理器
  * 
- * <p>负责将用户配置的中文唤醒词转换为拼音 tokens，与 sherpa-onnx KWS 模型词表兼容。
+ * <p>
+ * 负责将用户配置的中文唤醒词转换为拼音 tokens，与 sherpa-onnx KWS 模型词表兼容。
  * 例如："张三" → "zhang san" → "z h a ng s a n"
  * 
  * @author Code Assistant
@@ -23,10 +24,10 @@ import org.slf4j.LoggerFactory;
  */
 public class KeywordPreprocessor {
     private static final Logger logger = LoggerFactory.getLogger(KeywordPreprocessor.class);
-    
+
     private static final Pattern CHINESE_PATTERN = Pattern.compile("[\\u4E00-\\u9FFF]");
     private static final Pattern ALLOWED_CHARS = Pattern.compile("[^a-z0-9\\s]");
-    
+
     /**
      * 预处理唤醒词，返回适配 sherpa-onnx KWS 模型的拼音 token 字符串
      * 
@@ -37,7 +38,7 @@ public class KeywordPreprocessor {
         if (keyword == null || keyword.trim().isEmpty()) {
             return "";
         }
-        
+
         try {
             // 1. 转拼音
             String pinyin = convertChineseToPinyin(keyword);
@@ -45,7 +46,7 @@ public class KeywordPreprocessor {
                 logger.warn("唤醒词 '{}' 转拼音失败，使用原值", keyword);
                 return keyword.toLowerCase(Locale.ROOT);
             }
-            
+
             // 2. 生成 ppinyin tokens（将拼音分解为单个字母）
             String ppinyinTokens = generatePinyinTokens(pinyin);
             logger.debug("关键词预处理: {} → {} → {}", keyword, pinyin, ppinyinTokens);
@@ -55,7 +56,7 @@ public class KeywordPreprocessor {
             return keyword.toLowerCase(Locale.ROOT);
         }
     }
-    
+
     /**
      * 将中文转为拼音，保留非中文字符
      * 
@@ -65,15 +66,14 @@ public class KeywordPreprocessor {
     private static String convertChineseToPinyin(String text) {
         StringBuilder result = new StringBuilder();
         char[] chars = text.toCharArray();
-        
+
         for (char c : chars) {
             // 检查是否是中文字符
             if (CHINESE_PATTERN.matcher(String.valueOf(c)).find()) {
                 try {
                     String[] pinyins = PinyinHelper.toHanyuPinyinStringArray(
-                        c, 
-                        createPinyinFormat()
-                    );
+                            c,
+                            createPinyinFormat());
                     if (pinyins != null && pinyins.length > 0) {
                         result.append(pinyins[0]).append(" ");
                     }
@@ -89,15 +89,15 @@ public class KeywordPreprocessor {
             }
             // 其他字符忽略
         }
-        
+
         // 归一化：移除重音符号、多余空格
         String normalized = Normalizer.normalize(result.toString(), Normalizer.Form.NFD);
-        normalized = normalized.replaceAll("\\p{M}+", "");  // 移除重音标记
+        normalized = normalized.replaceAll("\\p{M}+", ""); // 移除重音标记
         normalized = normalized.replaceAll("\\s+", " ").trim();
-        
+
         return normalized.toLowerCase(Locale.ROOT);
     }
-    
+
     /**
      * 从拼音生成 ppinyin tokens（将拼音拆分为单个字母）
      * 例如："zhang san" → "z h a ng s a n"
@@ -109,33 +109,34 @@ public class KeywordPreprocessor {
         // 清理非法字符（仅保留 a-z 和空格）
         String cleaned = pinyin.replaceAll(ALLOWED_CHARS.pattern(), "");
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
-        
+
         // 按空格分割拼音音节
         String[] syllables = cleaned.split("\\s+");
-        
+
         List<String> tokens = new ArrayList<>();
         for (String syllable : syllables) {
-            if (syllable.isEmpty()) continue;
-            
+            if (syllable.isEmpty())
+                continue;
+
             // 将每个音节的字母拆分开
             for (char c : syllable.toCharArray()) {
                 tokens.add(String.valueOf(c));
             }
         }
-        
+
         return String.join(" ", tokens);
     }
-    
+
     /**
      * 创建拼音格式配置
      */
     private static HanyuPinyinOutputFormat createPinyinFormat() {
         HanyuPinyinOutputFormat format = new HanyuPinyinOutputFormat();
         format.setCaseType(HanyuPinyinCaseType.LOWERCASE);
-        format.setToneType(HanyuPinyinToneType.WITHOUT_TONE);  // 不带声调
+        format.setToneType(HanyuPinyinToneType.WITHOUT_TONE); // 不带声调
         return format;
     }
-    
+
     /**
      * 处理多个关键词（用逗号或空格分隔）
      * 
@@ -144,14 +145,14 @@ public class KeywordPreprocessor {
      */
     public static List<String> preprocessKeywords(String keywords) {
         List<String> result = new ArrayList<>();
-        
+
         if (keywords == null || keywords.trim().isEmpty()) {
             return result;
         }
-        
+
         // 支持逗号或分号分隔
         String[] parts = keywords.split("[,;\\s]+");
-        
+
         for (String part : parts) {
             String trimmed = part.trim();
             if (!trimmed.isEmpty()) {
@@ -161,10 +162,10 @@ public class KeywordPreprocessor {
                 }
             }
         }
-        
+
         return result;
     }
-    
+
     /**
      * 合并预处理的关键词为单个传给 KWS 引擎的字符串
      * 
