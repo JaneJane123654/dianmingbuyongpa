@@ -19,6 +19,11 @@ class LocalAsrModelManager(
     private val storage: AndroidStorage,
     private val client: OkHttpClient = OkHttpClient()
 ) {
+    private data class DownloadSource(
+        val name: String,
+        val baseUrl: String
+    )
+
     private val requiredFiles = listOf("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
     private val minFileSizeBytes = mapOf(
         "encoder.onnx" to 16 * 1024L,
@@ -26,7 +31,16 @@ class LocalAsrModelManager(
         "joiner.onnx" to 16 * 1024L,
         "tokens.txt" to 32L
     )
-    private val baseUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
+    private val downloadSources = listOf(
+        DownloadSource(
+            name = "GitHub 官方源",
+            baseUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
+        ),
+        DownloadSource(
+            name = "中国镜像源(kkgithub)",
+            baseUrl = "https://kkgithub.com/k2-fsa/sherpa-onnx/releases/download"
+        )
+    )
     private val downloadClient = client.newBuilder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(3, TimeUnit.MINUTES)
@@ -38,37 +52,44 @@ class LocalAsrModelManager(
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16",
             name = "中英双语极速模型（默认）",
-            description = "小体积+低延迟优先，适合移动端 3 秒内出结果"
+            description = "小体积+低延迟优先，适合移动端 3 秒内出结果",
+            sizeLabel = "约 40~60 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20-mobile",
             name = "中英双语均衡模型",
-            description = "速度与效果平衡，适合课堂实时识别"
+            description = "速度与效果平衡，适合课堂实时识别",
+            sizeLabel = "约 70~100 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-multi-zh-hans-2023-12-12-mobile",
             name = "中文增强模型（高精度）",
-            description = "中文识别效果优先，体积更大，移动端可用"
+            description = "中文识别效果优先，体积更大，移动端可用",
+            sizeLabel = "约 100~150 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
             name = "中文加速模型 INT8",
-            description = "量化加速，中文识别更快，适合性能较好的手机"
+            description = "量化加速，中文识别更快，适合性能较好的手机",
+            sizeLabel = "约 50~80 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23",
             name = "中文小模型 14M（轻量）",
-            description = "体积较小，优先下载，适合快速启动本机语音识别"
+            description = "体积较小，优先下载，适合快速启动本机语音识别",
+            sizeLabel = "约 14 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
             name = "英文小模型 20M",
-            description = "英文识别优先选择，移动端常用轻量配置"
+            description = "英文识别优先选择，移动端常用轻量配置",
+            sizeLabel = "约 20 MB"
         ),
         AsrModelOption(
             id = "sherpa-onnx-streaming-zipformer-en-2023-06-26-mobile",
             name = "英文增强模型（zipformer）",
-            description = "英文识别效果优先，体积更大，建议在较新手机上使用"
+            description = "英文识别效果优先，体积更大，建议在较新手机上使用",
+            sizeLabel = "约 80~120 MB"
         )
     )
 
@@ -88,12 +109,13 @@ class LocalAsrModelManager(
 
     fun downloadAndPrepare(
         modelId: String,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit = {}
     ): Result<File> {
         val archive = File(context.cacheDir, "asr_${modelId}_${UUID.randomUUID()}.tar.bz2")
         val tmpArchive = File(archive.absolutePath + ".part")
         try {
-            downloadArchiveWithRetry(tmpArchive, modelId, onProgress)
+            downloadArchiveWithFallback(tmpArchive, modelId, onProgress, onEvent)
             if (!tmpArchive.renameTo(archive)) {
                 return Result.failure(IOException("ASR模型包移动失败"))
             }
@@ -139,15 +161,15 @@ class LocalAsrModelManager(
     data class AsrModelOption(
         val id: String,
         val name: String,
-        val description: String
+        val description: String,
+        val sizeLabel: String
     )
 
     private fun downloadArchive(
         target: File,
-        modelId: String,
+        url: String,
         onProgress: (Long, Long) -> Unit
     ) {
-        val url = "$baseUrl/asr-models/$modelId.tar.bz2"
         val request = Request.Builder().url(url).build()
         downloadClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -171,10 +193,44 @@ class LocalAsrModelManager(
         }
     }
 
-    private fun downloadArchiveWithRetry(
+    private fun buildArchiveUrl(baseUrl: String, modelId: String): String {
+        return "$baseUrl/asr-models/$modelId.tar.bz2"
+    }
+
+    private fun downloadArchiveWithFallback(
         target: File,
         modelId: String,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit
+    ) {
+        val sourceErrors = mutableListOf<String>()
+        downloadSources.forEachIndexed { index, source ->
+            val url = buildArchiveUrl(source.baseUrl, modelId)
+            try {
+                onEvent("ASR模型下载源尝试(${index + 1}/${downloadSources.size}): ${source.name}")
+                downloadArchiveWithRetry(target, url, source.name, onProgress, onEvent)
+                if (index > 0) {
+                    onEvent("ASR已切换至${source.name}并下载成功")
+                }
+                return
+            } catch (e: IOException) {
+                val reason = e.message ?: e.javaClass.simpleName
+                sourceErrors.add("${source.name}: $reason")
+                onEvent("ASR模型下载源失败: ${source.name}，原因: $reason")
+                if (index == 0 && downloadSources.size > 1) {
+                    onEvent("ASR GitHub 下载失败，自动切换到中国镜像源重试")
+                }
+            }
+        }
+        throw IOException("ASR模型下载失败，已尝试全部下载源: ${sourceErrors.joinToString(" | ")}")
+    }
+
+    private fun downloadArchiveWithRetry(
+        target: File,
+        url: String,
+        sourceName: String,
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit
     ) {
         val maxAttempts = 3
         var lastError: IOException? = null
@@ -183,11 +239,12 @@ class LocalAsrModelManager(
                 if (target.exists()) {
                     target.delete()
                 }
-                downloadArchive(target, modelId, onProgress)
+                downloadArchive(target, url, onProgress)
                 return
             } catch (e: IOException) {
                 lastError = e
                 if (attempt < maxAttempts) {
+                    onEvent("下载重试: $sourceName 第${attempt}次失败，准备第${attempt + 1}次")
                     Thread.sleep(1200L * attempt)
                 }
             }

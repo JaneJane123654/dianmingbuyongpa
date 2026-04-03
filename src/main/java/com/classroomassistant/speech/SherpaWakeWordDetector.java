@@ -6,12 +6,17 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.classroomassistant.core.speech.KeywordPreprocessor;
+import com.classroomassistant.core.speech.WakeWordListener;
+import com.classroomassistant.core.speech.WakeWordDetector;
 
 /**
  * Sherpa-ONNX 唤醒词检测器 (KWS) 实现类
  *
  * <p>基于 Sherpa-ONNX 框架实现。通过 JNI 调用底层 ONNX Runtime 进行关键字检测（Keyword Spotting）。
  * 该类负责在音频流中识别预设的唤醒词，并触发通知。
+ *
+ * <p>支持中文唤醒词自动预处理：将中文关键词转换为拼音 tokens，与 KWS 模型词表兼容。
  *
  * <p>注意：在不再使用时，务必调用 {@link #close()} 释放 JNI 持有的 native 句柄。
  *
@@ -39,8 +44,43 @@ public class SherpaWakeWordDetector implements WakeWordDetector, AutoCloseable {
     public void initialize(Path modelDir, String keywords) {
         Objects.requireNonNull(modelDir, "模型目录不能为空");
         SherpaOnnxJNI.ensureLoaded();
-        handle = jni.initializeKws(modelDir, keywords == null ? "" : keywords);
-        logger.info("唤醒词检测器初始化完成，模型目录: {}", modelDir);
+        
+        // 预处理中文唤醒词，转换为拼音 tokens
+        String processedKeywords = preprocessKeywords(keywords);
+        
+        logger.info("唤醒词初始化: 原始={}, 处理后={}, 模型目录={}", 
+            keywords, processedKeywords, modelDir);
+        
+        handle = jni.initializeKws(modelDir, processedKeywords == null ? "" : processedKeywords);
+        logger.info("唤醒词检测器初始化完成");
+    }
+
+    /**
+     * 预处理关键词，将中文转为拼音 tokens
+     * 
+     * @param keywords 原始关键词（可能包含中文）
+     * @return 处理后的 token 字符串，用逗号分隔多个关键词
+     */
+    private String preprocessKeywords(String keywords) {
+        if (keywords == null || keywords.trim().isEmpty()) {
+            logger.warn("唤醒词为空");
+            return "";
+        }
+        
+        try {
+            List<String> processed = KeywordPreprocessor.preprocessKeywords(keywords);
+            if (processed.isEmpty()) {
+                logger.warn("唤醒词预处理结果为空，使用原值");
+                return keywords;
+            }
+            
+            String result = KeywordPreprocessor.mergeProcessedKeywords(processed);
+            logger.info("唤醒词预处理成功: {} → {}", keywords, result);
+            return result;
+        } catch (Exception e) {
+            logger.error("唤醒词预处理异常，将使用原值", e);
+            return keywords;
+        }
     }
 
     /**

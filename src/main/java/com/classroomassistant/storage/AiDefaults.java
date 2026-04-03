@@ -51,6 +51,10 @@ public final class AiDefaults {
         return streamingDefault;
     }
 
+    public boolean streaming() {
+        return streamingDefault;
+    }
+
     public LLMConfig.ModelType providerDefault() {
         return providerDefault;
     }
@@ -87,4 +91,3 @@ public final class AiDefaults {
                 '}';
     }
 }
-

@@ -85,6 +85,13 @@
                 <version>${gson.version}</version>
             </dependency>
 
+            <!-- 中文拼音转换（用于唤醒词自动预处理） -->
+            <dependency>
+                <groupId>com.belerweb</groupId>
+                <artifactId>pinyin4j</artifactId>
+                <version>2.6.0</version>
+            </dependency>
+
             <!-- JavaFX（仅桌面） -->
             <dependency>
                 <groupId>org.openjfx</groupId>

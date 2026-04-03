@@ -9,6 +9,8 @@ import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.qianfan.QianfanChatModel;
 import dev.langchain4j.model.qianfan.QianfanStreamingChatModel;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -39,6 +41,7 @@ import org.slf4j.LoggerFactory;
 public class LangChain4jClient implements LLMClient, AutoCloseable {
 
     private static final Logger logger = LoggerFactory.getLogger(LangChain4jClient.class);
+    private static final Map<LLMConfig.ModelType, String> DEFAULT_BASE_URLS = buildDefaultBaseUrls();
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "langchain4j-client");
@@ -153,37 +156,6 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         String modelName = resolveModelName(config);
         LLMConfig.ModelType type = config.getModelType();
 
-        // OpenAI 原生接口
-        if (type == LLMConfig.ModelType.OPENAI) {
-            var builder = OpenAiChatModel.builder()
-                .apiKey(config.getApiKey())
-                .modelName(modelName);
-            if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()) {
-                builder.baseUrl(config.getBaseUrl());
-            }
-            return builder.build();
-        }
-
-        // DeepSeek（OpenAI 兼容接口）
-        if (type == LLMConfig.ModelType.DEEPSEEK) {
-            String baseUrl = resolveBaseUrl(config, "https://api.deepseek.com");
-            return OpenAiChatModel.builder()
-                .baseUrl(baseUrl)
-                .apiKey(config.getApiKey())
-                .modelName(modelName)
-                .build();
-        }
-
-        // KIMI / Moonshot（OpenAI 兼容接口）
-        if (type == LLMConfig.ModelType.KIMI) {
-            String baseUrl = resolveBaseUrl(config, "https://api.moonshot.cn/v1");
-            return OpenAiChatModel.builder()
-                .baseUrl(baseUrl)
-                .apiKey(config.getApiKey())
-                .modelName(modelName)
-                .build();
-        }
-
         // 百度千帆
         if (type == LLMConfig.ModelType.QIANFAN) {
             var builder = QianfanChatModel.builder()
@@ -195,7 +167,7 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
             return builder.build();
         }
 
-        throw new IllegalStateException("当前模型类型暂不支持: " + type);
+        return buildOpenAiCompatibleModel(config, modelName, type);
     }
 
     /**
@@ -208,37 +180,6 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         String modelName = resolveModelName(config);
         LLMConfig.ModelType type = config.getModelType();
 
-        // OpenAI 原生接口
-        if (type == LLMConfig.ModelType.OPENAI) {
-            var builder = OpenAiStreamingChatModel.builder()
-                .apiKey(config.getApiKey())
-                .modelName(modelName);
-            if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()) {
-                builder.baseUrl(config.getBaseUrl());
-            }
-            return builder.build();
-        }
-
-        // DeepSeek（OpenAI 兼容接口）
-        if (type == LLMConfig.ModelType.DEEPSEEK) {
-            String baseUrl = resolveBaseUrl(config, "https://api.deepseek.com");
-            return OpenAiStreamingChatModel.builder()
-                .baseUrl(baseUrl)
-                .apiKey(config.getApiKey())
-                .modelName(modelName)
-                .build();
-        }
-
-        // KIMI / Moonshot（OpenAI 兼容接口）
-        if (type == LLMConfig.ModelType.KIMI) {
-            String baseUrl = resolveBaseUrl(config, "https://api.moonshot.cn/v1");
-            return OpenAiStreamingChatModel.builder()
-                .baseUrl(baseUrl)
-                .apiKey(config.getApiKey())
-                .modelName(modelName)
-                .build();
-        }
-
         // 百度千帆
         if (type == LLMConfig.ModelType.QIANFAN) {
             var builder = QianfanStreamingChatModel.builder()
@@ -250,7 +191,35 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
             return builder.build();
         }
 
-        return null;
+        return buildOpenAiCompatibleStreamingModel(config, modelName, type);
+    }
+
+    private ChatLanguageModel buildOpenAiCompatibleModel(LLMConfig config, String modelName, LLMConfig.ModelType type) {
+        var builder = OpenAiChatModel.builder()
+            .apiKey(config.getApiKey())
+            .modelName(modelName);
+        String defaultBaseUrl = DEFAULT_BASE_URLS.get(type);
+        String resolvedBaseUrl = resolveBaseUrl(config, defaultBaseUrl);
+        if (resolvedBaseUrl != null && !resolvedBaseUrl.isBlank()) {
+            builder.baseUrl(resolvedBaseUrl);
+        }
+        return builder.build();
+    }
+
+    private StreamingChatLanguageModel buildOpenAiCompatibleStreamingModel(
+        LLMConfig config,
+        String modelName,
+        LLMConfig.ModelType type
+    ) {
+        var builder = OpenAiStreamingChatModel.builder()
+            .apiKey(config.getApiKey())
+            .modelName(modelName);
+        String defaultBaseUrl = DEFAULT_BASE_URLS.get(type);
+        String resolvedBaseUrl = resolveBaseUrl(config, defaultBaseUrl);
+        if (resolvedBaseUrl != null && !resolvedBaseUrl.isBlank()) {
+            builder.baseUrl(resolvedBaseUrl);
+        }
+        return builder.build();
     }
 
     /**
@@ -262,15 +231,67 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         }
         switch (config.getModelType()) {
             case OPENAI:
-                return "gpt-3.5-turbo";
+                return "gpt-4o-mini";
+            case OPENAI_COMPATIBLE:
+                return "gpt-4o-mini";
+            case ANTHROPIC:
+                return "claude-3-5-sonnet-20241022";
+            case GEMINI:
+                return "gemini-2.0-flash";
             case QIANFAN:
-                return "ERNIE-Speed";
+                return "ernie-4.0-8k";
             case DEEPSEEK:
                 return "deepseek-chat";
             case KIMI:
                 return "moonshot-v1-8k";
+            case DASHSCOPE:
+                return "qwen-plus";
+            case HUNYUAN:
+                return "hunyuan-lite";
+            case ZHIPU:
+                return "glm-4-flash";
+            case SILICONFLOW:
+                return "Qwen/Qwen2.5-7B-Instruct";
+            case MINIMAX:
+                return "abab6.5s-chat";
+            case MISTRAL:
+                return "mistral-small-latest";
+            case GROQ:
+                return "llama-3.3-70b-versatile";
+            case COHERE:
+                return "command-r-plus";
+            case OPENROUTER:
+                return "openai/gpt-4o-mini";
+            case AZURE_OPENAI:
+                return "gpt-4o-mini";
+            case BAICHUAN:
+                return "Baichuan4";
+            case YI:
+                return "yi-large";
+            case STEPFUN:
+                return "step-2";
+            case XAI:
+                return "grok-2-1212";
+            case FIREWORKS:
+                return "accounts/fireworks/models/llama-v3p1-70b-instruct";
+            case TOGETHER_AI:
+                return "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo";
+            case PERPLEXITY:
+                return "sonar";
+            case NOVITA:
+                return "meta-llama/llama-3.1-70b-instruct";
+            case REPLICATE:
+                return "meta/meta-llama-3-70b-instruct";
+            case CEREBRAS:
+                return "llama3.1-8b";
+            case SAMBANOVA:
+                return "Meta-Llama-3.1-70B-Instruct";
+            case OLLAMA:
+                return "qwen2.5:7b";
+            case LMSTUDIO:
+                return "local-model";
             default:
-                return "gpt-3.5-turbo";
+                return "gpt-4o-mini";
         }
     }
 
@@ -281,7 +302,41 @@ public class LangChain4jClient implements LLMClient, AutoCloseable {
         if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()) {
             return config.getBaseUrl();
         }
-        return defaultUrl;
+        return defaultUrl == null ? "" : defaultUrl;
+    }
+
+    private static Map<LLMConfig.ModelType, String> buildDefaultBaseUrls() {
+        Map<LLMConfig.ModelType, String> defaults = new EnumMap<>(LLMConfig.ModelType.class);
+        defaults.put(LLMConfig.ModelType.OPENAI, "");
+        defaults.put(LLMConfig.ModelType.OPENAI_COMPATIBLE, "");
+        defaults.put(LLMConfig.ModelType.ANTHROPIC, "https://api.anthropic.com/v1");
+        defaults.put(LLMConfig.ModelType.GEMINI, "https://generativelanguage.googleapis.com/v1beta/openai");
+        defaults.put(LLMConfig.ModelType.DEEPSEEK, "https://api.deepseek.com");
+        defaults.put(LLMConfig.ModelType.KIMI, "https://api.moonshot.cn/v1");
+        defaults.put(LLMConfig.ModelType.DASHSCOPE, "https://dashscope.aliyuncs.com/compatible-mode/v1");
+        defaults.put(LLMConfig.ModelType.HUNYUAN, "https://api.hunyuan.cloud.tencent.com/v1");
+        defaults.put(LLMConfig.ModelType.ZHIPU, "https://open.bigmodel.cn/api/paas/v4");
+        defaults.put(LLMConfig.ModelType.SILICONFLOW, "https://api.siliconflow.cn/v1");
+        defaults.put(LLMConfig.ModelType.MINIMAX, "https://api.minimax.chat/v1");
+        defaults.put(LLMConfig.ModelType.MISTRAL, "https://api.mistral.ai/v1");
+        defaults.put(LLMConfig.ModelType.GROQ, "https://api.groq.com/openai/v1");
+        defaults.put(LLMConfig.ModelType.COHERE, "https://api.cohere.ai/compatibility/v1");
+        defaults.put(LLMConfig.ModelType.OPENROUTER, "https://openrouter.ai/api/v1");
+        defaults.put(LLMConfig.ModelType.AZURE_OPENAI, "");
+        defaults.put(LLMConfig.ModelType.BAICHUAN, "https://api.baichuan-ai.com/v1");
+        defaults.put(LLMConfig.ModelType.YI, "https://api.lingyiwanwu.com/v1");
+        defaults.put(LLMConfig.ModelType.STEPFUN, "https://api.stepfun.com/v1");
+        defaults.put(LLMConfig.ModelType.XAI, "https://api.x.ai/v1");
+        defaults.put(LLMConfig.ModelType.FIREWORKS, "https://api.fireworks.ai/inference/v1");
+        defaults.put(LLMConfig.ModelType.TOGETHER_AI, "https://api.together.xyz/v1");
+        defaults.put(LLMConfig.ModelType.PERPLEXITY, "https://api.perplexity.ai");
+        defaults.put(LLMConfig.ModelType.NOVITA, "https://api.novita.ai/v3/openai");
+        defaults.put(LLMConfig.ModelType.REPLICATE, "https://api.replicate.com/v1");
+        defaults.put(LLMConfig.ModelType.CEREBRAS, "https://api.cerebras.ai/v1");
+        defaults.put(LLMConfig.ModelType.SAMBANOVA, "https://api.sambanova.ai/v1");
+        defaults.put(LLMConfig.ModelType.OLLAMA, "http://127.0.0.1:11434/v1");
+        defaults.put(LLMConfig.ModelType.LMSTUDIO, "http://127.0.0.1:1234/v1");
+        return defaults;
     }
 
     /**

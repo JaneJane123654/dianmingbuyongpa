@@ -45,6 +45,7 @@ public class PreferencesManager {
     private static final String KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS = "vad.quietAutoLookbackExtraSeconds";
     private static final String KEY_AI_PROVIDER = "ai.provider";
     private static final String KEY_AI_MODEL_NAME = "ai.modelName";
+    private static final String KEY_AI_BASE_URL = "ai.baseUrl";
     private static final String KEY_AI_TOKEN_ENCRYPTED = "ai.token.encrypted";
     private static final String KEY_AI_SECRET_ENCRYPTED = "ai.secret.encrypted";
     private static final String KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled";
@@ -86,7 +87,7 @@ public class PreferencesManager {
      */
     public UserPreferences load() {
         String keywords = preferences.get(KEY_KEYWORDS, "");
-        float kwsThreshold = (preferences.getInt(KEY_KWS_TRIGGER_THRESHOLD, 25) / 100f);
+        float kwsThreshold = (preferences.getInt(KEY_KWS_TRIGGER_THRESHOLD, 5) / 100f);
         kwsThreshold = Math.max(0.05f, Math.min(0.8f, kwsThreshold));
         int lookbackSeconds = preferences.getInt(KEY_AUDIO_LOOKBACK_SECONDS, 15);
         lookbackSeconds = Math.max(8, Math.min(120, lookbackSeconds));
@@ -110,6 +111,7 @@ public class PreferencesManager {
             modelType = LLMConfig.ModelType.QIANFAN;
         }
         String modelName = preferences.get(KEY_AI_MODEL_NAME, "");
+        String aiBaseUrl = preferences.get(KEY_AI_BASE_URL, "");
         boolean localAsrEnabled = preferences.getBoolean(KEY_ASR_LOCAL_ENABLED, true);
         String localAsrModelId = preferences.get(KEY_ASR_LOCAL_MODEL_ID, "");
         boolean cloudWhisperEnabled = preferences.getBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, false);
@@ -140,6 +142,7 @@ public class PreferencesManager {
                 .quietAutoLookbackExtraSeconds(quietAutoLookbackExtraSeconds)
                 .aiModelType(modelType)
                 .aiModelName(modelName)
+                .aiBaseUrl(aiBaseUrl)
                 .recordingSaveEnabled(recordingSaveEnabled)
                 .recordingRetentionDays(recordingRetentionDays)
                 .aiTokenPlainText("")
@@ -183,6 +186,7 @@ public class PreferencesManager {
                 Math.max(1, Math.min(60, prefs.getQuietAutoLookbackExtraSeconds())));
         preferences.put(KEY_AI_PROVIDER, prefs.getAiModelType().name());
         preferences.put(KEY_AI_MODEL_NAME, prefs.getAiModelName());
+        preferences.put(KEY_AI_BASE_URL, prefs.getAiBaseUrl());
         preferences.putBoolean(KEY_RECORDING_SAVE_ENABLED, prefs.isRecordingSaveEnabled());
         preferences.putInt(KEY_RECORDING_RETENTION_DAYS, prefs.getRecordingRetentionDays());
         preferences.putBoolean(KEY_ASR_LOCAL_ENABLED, prefs.isLocalAsrEnabled());

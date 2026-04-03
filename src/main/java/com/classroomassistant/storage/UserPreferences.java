@@ -33,6 +33,7 @@ public class UserPreferences {
     private final int recordingRetentionDays;
     private final LLMConfig.ModelType aiModelType;
     private final String aiModelName;
+    private final String aiBaseUrl;
     private final String aiTokenPlainText;
     private final String aiSecretKey;
     private final String speechApiKey;
@@ -66,6 +67,7 @@ public class UserPreferences {
             int recordingRetentionDays,
             LLMConfig.ModelType aiModelType,
             String aiModelName,
+            String aiBaseUrl,
             String aiTokenPlainText,
             String aiSecretKey,
             String speechApiKey,
@@ -97,6 +99,7 @@ public class UserPreferences {
         this.recordingRetentionDays = recordingRetentionDays;
         this.aiModelType = aiModelType;
         this.aiModelName = aiModelName;
+        this.aiBaseUrl = aiBaseUrl == null ? "" : aiBaseUrl.trim();
         this.aiTokenPlainText = aiTokenPlainText;
         this.aiSecretKey = aiSecretKey == null ? "" : aiSecretKey;
         this.speechApiKey = speechApiKey;
@@ -137,7 +140,7 @@ public class UserPreferences {
     }
 
     /**
-     * 获取唤醒词触发阈值（0.05-0.8，推荐 0.25）
+     * 获取唤醒词触发阈值（0.05-0.8，推荐 0.05）
      */
     public float getKwsThreshold() {
         return kwsThreshold;
@@ -211,6 +214,13 @@ public class UserPreferences {
      */
     public String getAiModelName() {
         return aiModelName;
+    }
+
+    /**
+     * 获取 AI 接口基础地址
+     */
+    public String getAiBaseUrl() {
+        return aiBaseUrl;
     }
 
     /**
@@ -325,7 +335,7 @@ public class UserPreferences {
     public static final class Builder {
 
         private String keywords = "";
-        private float kwsThreshold = 0.25f;
+        private float kwsThreshold = 0.05f;
         private boolean vadEnabled = true;
         private int vadQuietThresholdSeconds = 5;
         private String quietAlertMode = "NOTIFICATION_ONLY";
@@ -336,6 +346,7 @@ public class UserPreferences {
         private int recordingRetentionDays = 7;
         private LLMConfig.ModelType aiModelType = LLMConfig.ModelType.QIANFAN;
         private String aiModelName = "";
+        private String aiBaseUrl = "";
         private String aiTokenPlainText = "";
         private String aiSecretKey = "";
         private String speechApiKey = "";
@@ -416,6 +427,11 @@ public class UserPreferences {
 
         public Builder aiModelName(String aiModelName) {
             this.aiModelName = aiModelName == null ? "" : aiModelName.trim();
+            return this;
+        }
+
+        public Builder aiBaseUrl(String aiBaseUrl) {
+            this.aiBaseUrl = aiBaseUrl == null ? "" : aiBaseUrl.trim();
             return this;
         }
 
@@ -532,6 +548,7 @@ public class UserPreferences {
                     recordingRetentionDays,
                     aiModelType,
                     aiModelName,
+                    aiBaseUrl,
                     aiTokenPlainText,
                     aiSecretKey,
                     speechApiKey,

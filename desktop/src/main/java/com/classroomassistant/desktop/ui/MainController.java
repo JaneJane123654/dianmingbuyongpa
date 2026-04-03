@@ -23,7 +23,8 @@ import java.time.format.DateTimeFormatter;
 /**
  * 桌面端主界面控制器
  *
- * <p>负责 JavaFX 主界面的 UI 交互逻辑与状态同步。
+ * <p>
+ * 负责 JavaFX 主界面的 UI 交互逻辑与状态同步。
  * 本类遵循"瘦控制器"原则，仅处理 UI 事件的分发和界面的数据绑定。
  *
  * @author Code Assistant
@@ -143,20 +144,21 @@ public class MainController {
         appendLog("开始录音，进入监听状态");
 
         // 启动音频采集
-        platformProvider.getAudioRecorder().start(new com.classroomassistant.core.platform.PlatformAudioRecorder.AudioDataListener() {
-            @Override
-            public void onAudioData(byte[] data, int length) {
-                // 处理音频数据
-            }
+        platformProvider.getAudioRecorder()
+                .start(new com.classroomassistant.core.platform.PlatformAudioRecorder.AudioDataListener() {
+                    @Override
+                    public void onAudioData(byte[] data, int length) {
+                        // 处理音频数据
+                    }
 
-            @Override
-            public void onError(String error) {
-                Platform.runLater(() -> {
-                    appendLog("录音错误: " + error);
-                    hintText.set("录音错误: " + error);
+                    @Override
+                    public void onError(String error) {
+                        Platform.runLater(() -> {
+                            appendLog("录音错误: " + error);
+                            hintText.set("录音错误: " + error);
+                        });
+                    }
                 });
-            }
-        });
     }
 
     /**
@@ -183,7 +185,8 @@ public class MainController {
 
     /**
      * "设置"按钮点击事件
-     * <p>打开设置窗口（模态对话框），使用 DesktopSettingsController 管理设置。
+     * <p>
+     * 打开设置窗口（模态对话框），使用 DesktopSettingsController 管理设置。
      */
     @FXML
     private void openSettings() {

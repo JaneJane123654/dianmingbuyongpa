@@ -30,12 +30,64 @@ public class LLMConfig {
     public enum ModelType {
         /** OpenAI 系列模型 */
         OPENAI,
-        /** 百度千帆（文心一言）系列模型 */
-        QIANFAN,
+        /** OpenAI 兼容中转站（自定义 Base URL） */
+        OPENAI_COMPATIBLE,
+        /** Anthropic Claude */
+        ANTHROPIC,
+        /** Google Gemini（OpenAI兼容入口） */
+        GEMINI,
         /** DeepSeek 系列模型 */
         DEEPSEEK,
+        /** 百度千帆（文心一言）系列模型 */
+        QIANFAN,
         /** 月之暗面 (Kimi) 系列模型 */
-        KIMI
+        KIMI,
+        /** 阿里云百炼 / 通义千问（兼容模式） */
+        DASHSCOPE,
+        /** 腾讯混元（兼容模式） */
+        HUNYUAN,
+        /** 智谱 AI（兼容模式） */
+        ZHIPU,
+        /** 硅基流动 SiliconFlow */
+        SILICONFLOW,
+        /** MiniMax */
+        MINIMAX,
+        /** Mistral */
+        MISTRAL,
+        /** Groq */
+        GROQ,
+        /** Cohere */
+        COHERE,
+        /** OpenRouter */
+        OPENROUTER,
+        /** Azure OpenAI */
+        AZURE_OPENAI,
+        /** 百川智能 */
+        BAICHUAN,
+        /** 零一万物 Yi */
+        YI,
+        /** 阶跃星辰 StepFun */
+        STEPFUN,
+        /** xAI (Grok) */
+        XAI,
+        /** Fireworks AI */
+        FIREWORKS,
+        /** Together AI */
+        TOGETHER_AI,
+        /** Perplexity */
+        PERPLEXITY,
+        /** Novita */
+        NOVITA,
+        /** Replicate */
+        REPLICATE,
+        /** Cerebras */
+        CEREBRAS,
+        /** SambaNova */
+        SAMBANOVA,
+        /** Ollama（本地） */
+        OLLAMA,
+        /** LM Studio（本地） */
+        LMSTUDIO
     }
 
     private final ModelType modelType;

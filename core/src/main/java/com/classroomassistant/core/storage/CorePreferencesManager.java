@@ -11,9 +11,9 @@ import org.slf4j.LoggerFactory;
  * 通过 PlatformPreferences 和 PlatformSecureStorage 接口实现跨平台存储
  */
 public class CorePreferencesManager {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(CorePreferencesManager.class);
-    
+
     // 键名常量
     private static final String KEY_LLM_MODEL_TYPE = "llm.model.type";
     private static final String KEY_LLM_BASE_URL = "llm.base.url";
@@ -24,54 +24,56 @@ public class CorePreferencesManager {
     private static final String KEY_AUTO_START = "app.auto.start";
     private static final String KEY_LANGUAGE = "app.language";
     private static final String KEY_SPEECH_API_URL = "speech.api.url";
-    
+
     // 敏感数据键名（存储在安全存储中）
     private static final String KEY_LLM_API_KEY = "llm.api.key";
     private static final String KEY_LLM_SECRET_KEY = "llm.secret.key";
     private static final String KEY_SPEECH_API_KEY = "speech.api.key";
-    
+
     private final PlatformPreferences preferences;
     private final PlatformSecureStorage secureStorage;
-    
-    public CorePreferencesManager(PlatformPreferences preferences, 
-                                   PlatformSecureStorage secureStorage) {
+
+    public CorePreferencesManager(PlatformPreferences preferences,
+            PlatformSecureStorage secureStorage) {
         this.preferences = preferences;
         this.secureStorage = secureStorage;
     }
-    
+
     /**
      * 加载用户偏好设置
      */
     public UserPreferences load() {
         logger.debug("加载用户偏好设置...");
-        
+
         return UserPreferences.builder()
-            .aiModelType(preferences.getString(KEY_LLM_MODEL_TYPE, "QIANFAN"))
-            .aiTokenPlainText(secureStorage.retrieveSecure(KEY_LLM_API_KEY))
-            .aiSecretKey(secureStorage.retrieveSecure(KEY_LLM_SECRET_KEY))
-            .aiModelName(preferences.getString(KEY_LLM_MODEL_NAME, ""))
-            .speechApiKey(secureStorage.retrieveSecure(KEY_SPEECH_API_KEY))
-            .keywords(preferences.getString(KEY_WAKE_WORD, "小助手"))
-            .vadQuietThresholdSeconds(preferences.getInt(KEY_SILENCE_TIMEOUT, 2000) / 1000)
-            .autoStart(preferences.getBoolean(KEY_AUTO_START, false))
-            .language(preferences.getString(KEY_LANGUAGE, "zh-CN"))
-            .build();
+                .aiModelType(preferences.getString(KEY_LLM_MODEL_TYPE, "QIANFAN"))
+                .aiBaseUrl(preferences.getString(KEY_LLM_BASE_URL, ""))
+                .aiTokenPlainText(secureStorage.retrieveSecure(KEY_LLM_API_KEY))
+                .aiSecretKey(secureStorage.retrieveSecure(KEY_LLM_SECRET_KEY))
+                .aiModelName(preferences.getString(KEY_LLM_MODEL_NAME, ""))
+                .speechApiKey(secureStorage.retrieveSecure(KEY_SPEECH_API_KEY))
+                .keywords(preferences.getString(KEY_WAKE_WORD, "小助手"))
+                .vadQuietThresholdSeconds(preferences.getInt(KEY_SILENCE_TIMEOUT, 2000) / 1000)
+                .autoStart(preferences.getBoolean(KEY_AUTO_START, false))
+                .language(preferences.getString(KEY_LANGUAGE, "zh-CN"))
+                .build();
     }
-    
+
     /**
      * 保存用户偏好设置
      */
     public void save(UserPreferences prefs) {
         logger.debug("保存用户偏好设置...");
-        
+
         // 普通设置
         preferences.putString(KEY_LLM_MODEL_TYPE, prefs.getAiModelType());
+        preferences.putString(KEY_LLM_BASE_URL, prefs.getAiBaseUrl());
         preferences.putString(KEY_LLM_MODEL_NAME, prefs.getAiModelName());
         preferences.putString(KEY_WAKE_WORD, prefs.getKeywords());
         preferences.putInt(KEY_SILENCE_TIMEOUT, prefs.getVadQuietThresholdSeconds() * 1000);
         preferences.putBoolean(KEY_AUTO_START, prefs.isAutoStart());
         preferences.putString(KEY_LANGUAGE, prefs.getLanguage());
-        
+
         // 敏感数据（加密存储）
         if (prefs.getAiTokenPlainText() != null && !prefs.getAiTokenPlainText().isEmpty()) {
             secureStorage.storeSecure(KEY_LLM_API_KEY, prefs.getAiTokenPlainText());
@@ -82,11 +84,11 @@ public class CorePreferencesManager {
         if (prefs.getSpeechApiKey() != null && !prefs.getSpeechApiKey().isEmpty()) {
             secureStorage.storeSecure(KEY_SPEECH_API_KEY, prefs.getSpeechApiKey());
         }
-        
+
         preferences.flush();
         logger.info("用户偏好设置已保存");
     }
-    
+
     /**
      * 重置为默认设置
      */

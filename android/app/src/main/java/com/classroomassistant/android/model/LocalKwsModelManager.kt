@@ -19,9 +19,23 @@ class LocalKwsModelManager(
     private val storage: AndroidStorage,
     private val client: OkHttpClient = OkHttpClient()
 ) {
+    private data class DownloadSource(
+        val name: String,
+        val baseUrl: String
+    )
+
     private val requiredFiles = listOf("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt")
     private val optionalKeywordFiles = listOf("keywords.txt", "test_keywords.txt")
-    private val baseUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
+    private val downloadSources = listOf(
+        DownloadSource(
+            name = "GitHub 官方源",
+            baseUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
+        ),
+        DownloadSource(
+            name = "中国镜像源(kkgithub)",
+            baseUrl = "https://kkgithub.com/k2-fsa/sherpa-onnx/releases/download"
+        )
+    )
     private val downloadClient = client.newBuilder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(2, TimeUnit.MINUTES)
@@ -32,17 +46,20 @@ class LocalKwsModelManager(
         KwsModelOption(
             id = "sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01",
             name = "Zipformer WenetSpeech 3.3M (2024-01-01)",
-            description = "中文唤醒模型，覆盖常见课堂场景，体积适中"
+            description = "中文唤醒模型，覆盖常见课堂场景，体积适中",
+            sizeLabel = "约 3.3 MB"
         ),
         KwsModelOption(
             id = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01",
             name = "Zipformer GigaSpeech 3.3M (2024-01-01)",
-            description = "英语为主的唤醒模型，适合英文课堂或双语环境"
+            description = "英语为主的唤醒模型，适合英文课堂或双语环境",
+            sizeLabel = "约 3.3 MB"
         ),
         KwsModelOption(
             id = "sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20",
             name = "Zipformer 中英 3M (2025-12-20)",
-            description = "中英双语唤醒模型，优先推荐给混合语言场景"
+            description = "中英双语唤醒模型，优先推荐给混合语言场景",
+            sizeLabel = "约 3 MB"
         )
     )
 
@@ -63,12 +80,13 @@ class LocalKwsModelManager(
 
     fun downloadAndPrepare(
         modelId: String,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit = {}
     ): Result<File> {
         val archive = File(context.cacheDir, "kws_${modelId}_${UUID.randomUUID()}.tar.bz2")
         val tmpArchive = File(archive.absolutePath + ".part")
         try {
-            downloadArchiveWithRetry(tmpArchive, modelId, onProgress)
+            downloadArchiveWithFallback(tmpArchive, modelId, onProgress, onEvent)
             if (!tmpArchive.renameTo(archive)) {
                 return Result.failure(IOException("模型包移动失败"))
             }
@@ -133,10 +151,9 @@ class LocalKwsModelManager(
 
     private fun downloadArchive(
         target: File,
-        modelId: String,
+        url: String,
         onProgress: (Long, Long) -> Unit
     ) {
-        val url = "$baseUrl/kws-models/$modelId.tar.bz2"
         val request = Request.Builder().url(url).build()
         downloadClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -160,10 +177,44 @@ class LocalKwsModelManager(
         }
     }
 
-    private fun downloadArchiveWithRetry(
+    private fun buildArchiveUrl(baseUrl: String, modelId: String): String {
+        return "$baseUrl/kws-models/$modelId.tar.bz2"
+    }
+
+    private fun downloadArchiveWithFallback(
         target: File,
         modelId: String,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit
+    ) {
+        val sourceErrors = mutableListOf<String>()
+        downloadSources.forEachIndexed { index, source ->
+            val url = buildArchiveUrl(source.baseUrl, modelId)
+            try {
+                onEvent("模型下载源尝试(${index + 1}/${downloadSources.size}): ${source.name}")
+                downloadArchiveWithRetry(target, url, source.name, onProgress, onEvent)
+                if (index > 0) {
+                    onEvent("已切换至${source.name}并下载成功")
+                }
+                return
+            } catch (e: IOException) {
+                val reason = e.message ?: e.javaClass.simpleName
+                sourceErrors.add("${source.name}: $reason")
+                onEvent("模型下载源失败: ${source.name}，原因: $reason")
+                if (index == 0 && downloadSources.size > 1) {
+                    onEvent("GitHub 下载失败，自动切换到中国镜像源重试")
+                }
+            }
+        }
+        throw IOException("模型下载失败，已尝试全部下载源: ${sourceErrors.joinToString(" | ")}")
+    }
+
+    private fun downloadArchiveWithRetry(
+        target: File,
+        url: String,
+        sourceName: String,
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit
     ) {
         val maxAttempts = 3
         var lastError: IOException? = null
@@ -172,11 +223,12 @@ class LocalKwsModelManager(
                 if (target.exists()) {
                     target.delete()
                 }
-                downloadArchive(target, modelId, onProgress)
+                downloadArchive(target, url, onProgress)
                 return
             } catch (e: IOException) {
                 lastError = e
                 if (attempt < maxAttempts) {
+                    onEvent("下载重试: $sourceName 第${attempt}次失败，准备第${attempt + 1}次")
                     Thread.sleep(1200L * attempt)
                 }
             }
@@ -187,7 +239,8 @@ class LocalKwsModelManager(
     data class KwsModelOption(
         val id: String,
         val name: String,
-        val description: String
+        val description: String,
+        val sizeLabel: String
     )
 
     private fun extractTarBz2(archive: File, targetDir: File) {

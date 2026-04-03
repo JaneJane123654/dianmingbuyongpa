@@ -2,6 +2,7 @@ package com.classroomassistant.session;
 
 import com.classroomassistant.ai.AnswerListener;
 import com.classroomassistant.ai.LLMClient;
+import com.classroomassistant.ai.LLMConfig;
 import com.classroomassistant.ai.PromptTemplate;
 import com.classroomassistant.audio.AudioRecorder;
 import com.classroomassistant.runtime.HealthMonitor;
@@ -72,6 +73,10 @@ public class ClassSessionManager {
     private long lastTriggerAtMillis;
     private int quietMillis;
 
+    private final int aiTimeoutSeconds;
+    private final int aiMaxRetryCount;
+    private final boolean aiStreaming;
+
     /**
      * 构造函数，注入所有必需的服务组件
      *
@@ -108,6 +113,10 @@ public class ClassSessionManager {
         this.audioRecorder = Objects.requireNonNull(audioRecorder, "录音器不能为空");
         this.speechServices = Objects.requireNonNull(speechServices, "语音服务不能为空");
         this.llmClient = Objects.requireNonNull(llmClient, "LLM 客户端不能为空");
+        var aiDefaults = this.configManager.getAiDefaults();
+        this.aiTimeoutSeconds = aiDefaults.timeoutSeconds();
+        this.aiMaxRetryCount = aiDefaults.maxRetryCount();
+        this.aiStreaming = aiDefaults.streamingDefault();
     }
 
     /**
@@ -180,8 +189,29 @@ public class ClassSessionManager {
         String recordingHint = prefs.isRecordingSaveEnabled() ? "录音保存已启用" : "录音保存已关闭";
         updateText(hintTextProperty, "设置已更新，" + recordingHint);
         updateText(recordingSaveStatusTextProperty, prefs.isRecordingSaveEnabled() ? "启用" : "关闭");
+        reconfigureLlmClient(prefs);
         quietMillis = 0;
         maybeWarnAiToken();
+    }
+
+    private void reconfigureLlmClient(UserPreferences prefs) {
+        LLMConfig.ModelType modelType = prefs.getAiModelType();
+        if (modelType == null) {
+            modelType = LLMConfig.ModelType.QIANFAN;
+        }
+        String token = preferencesManager.loadAiTokenPlainText();
+        String secretKey = preferencesManager.loadAiSecretKey();
+        LLMConfig llmConfig = LLMConfig.builder()
+            .modelType(modelType)
+            .modelName(prefs.getAiModelName())
+            .apiKey(token)
+            .secretKey(secretKey)
+            .baseUrl(prefs.getAiBaseUrl())
+            .timeout(java.time.Duration.ofSeconds(Math.max(1, aiTimeoutSeconds)))
+            .maxRetryCount(Math.max(0, aiMaxRetryCount))
+            .streaming(aiStreaming)
+            .build();
+        llmClient.configure(llmConfig);
     }
 
     /**
@@ -246,9 +276,28 @@ public class ClassSessionManager {
      */
     private void log(String message) {
         logger.info(message);
-        if (logCallback != null) {
+        if (logCallback != null && shouldDisplayUiLog(message)) {
             logCallback.accept(message);
         }
+    }
+
+    private boolean shouldDisplayUiLog(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        UserPreferences prefs = currentPreferences;
+        if (prefs == null || "FULL".equals(prefs.getLogMode())) {
+            return true;
+        }
+        String text = message.trim();
+        if (text.startsWith("触发识别:") || text.startsWith("开始语音识别，回溯") || text.startsWith("正在尝试恢复音频录制")) {
+            return false;
+        }
+        if (text.startsWith("开始录音") || text.startsWith("停止录音") || text.startsWith("语音识别完成")
+                || text.startsWith("音频录制恢复成功") || text.startsWith("进入错误状态")) {
+            return true;
+        }
+        return text.contains("失败") || text.contains("错误") || text.contains("异常");
     }
 
     private void checkModelsOnStartup() {

@@ -2,6 +2,7 @@ package com.classroomassistant.ai;
 
 import com.classroomassistant.storage.ConfigManager;
 import com.classroomassistant.storage.PreferencesManager;
+import com.classroomassistant.storage.UserPreferences;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -61,11 +62,22 @@ public class LLMClientFactory {
      */
     private LLMConfig resolveConfig() {
         var defaults = configManager.getAiDefaults();
+        UserPreferences userPreferences = preferencesManager.load();
         String token = preferencesManager.loadAiTokenPlainText();
+        String secretKey = preferencesManager.loadAiSecretKey();
+        LLMConfig.ModelType modelType = userPreferences.getAiModelType() == null
+            ? defaults.providerDefault()
+            : userPreferences.getAiModelType();
+        String modelName = userPreferences.getAiModelName();
+        if (modelName == null || modelName.isBlank()) {
+            modelName = defaults.modelNameDefault();
+        }
         return LLMConfig.builder()
-            .modelType(defaults.providerDefault())
-            .modelName(defaults.modelNameDefault())
+            .modelType(modelType)
+            .modelName(modelName)
             .apiKey(token)
+            .secretKey(secretKey)
+            .baseUrl(userPreferences.getAiBaseUrl())
             .timeout(Duration.ofSeconds(defaults.timeoutSeconds()))
             .maxRetryCount(defaults.maxRetryCount())
             .streaming(defaults.streamingDefault())

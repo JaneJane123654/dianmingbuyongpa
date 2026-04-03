@@ -4,8 +4,8 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="com.classroomassistant.ui.SettingsController">
+<BorderPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.classroomassistant.ui.SettingsController">
     <top>
         <HBox spacing="10">
             <padding>
@@ -25,15 +25,15 @@
                     <!-- 唤醒词 -->
                     <VBox spacing="8" styleClass="status-panel">
                         <Label text="唤醒词" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
-                        <Label text="支持多个唤醒词（支持中文逗号"，"和英文逗号","）" styleClass="info-label"/>
-                        <TextField fx:id="keywordsField" promptText="例如：陈慧萍，小张,张老师"/>
-                        <Label text="中文词条长度≥3时，会自动把后两个字加入候选（如"张三四"自动追加"三四"）。" styleClass="info-label"/>
+                        <Label text="支持多个唤醒词（支持中文逗号&quot;，&quot;和英文逗号&quot;,&quot;）" styleClass="info-label"/>
+                        <TextField fx:id="keywordsField" promptText="例如：小张,张老师,王同学"/>
+                        <Label text="中文词条长度≥3时，会自动把后两个字加入候选（如&quot;张三四&quot;自动追加&quot;三四&quot;）。" styleClass="info-label"/>
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <Label text="唤醒词触发值" styleClass="info-label"/>
-                            <Slider fx:id="kwsThresholdSlider" min="0.05" max="0.8" value="0.25" majorTickUnit="0.05" showTickLabels="true" showTickMarks="true" prefWidth="260"/>
-                            <Label fx:id="kwsThresholdLabel" text="0.25" styleClass="info-label"/>
+                            <Slider fx:id="kwsThresholdSlider" min="0.05" max="0.8" value="0.05" majorTickUnit="0.05" showTickLabels="true" showTickMarks="true" prefWidth="260"/>
+                            <Label fx:id="kwsThresholdLabel" text="0.05" styleClass="info-label"/>
                         </HBox>
-                        <Label text="说明：值越低越灵敏、越高越稳健；推荐先用 0.25，再按环境微调。" styleClass="info-label"/>
+                        <Label text="说明：值越低越灵敏、越高越稳健；推荐先用 0.05，再按环境微调。" styleClass="info-label"/>
                     </VBox>
 
                     <!-- 唤醒提示 -->
@@ -66,7 +66,7 @@
                             <Spinner fx:id="quietAutoLookbackExtraSpinner" editable="true"/>
                             <Label text="默认 8 秒" styleClass="info-label"/>
                         </HBox>
-                        <Label text="生效规则：实际回溯会按"安静时长 + 额外秒数"动态扩大（且不小于语音回溯设置）" styleClass="info-label"/>
+                        <Label text="生效规则：实际回溯会按&quot;安静时长 + 额外秒数&quot;动态扩大（且不小于语音回溯设置）" styleClass="info-label"/>
                     </VBox>
 
                     <!-- 语音回溯 -->
@@ -108,6 +108,12 @@
                             <Label text="模型名称（可选）" styleClass="info-label"/>
                             <ComboBox fx:id="modelNameComboBox" editable="true" prefWidth="260"/>
                         </HBox>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="Base URL（可选）" styleClass="info-label"/>
+                            <TextField fx:id="baseUrlField" promptText="如 https://api.openai.com" prefWidth="260"/>
+                            <Button fx:id="refreshModelListButton" text="拉取模型" onAction="#refreshModelNames"/>
+                        </HBox>
+                        <Label text="支持 OpenAI 兼容中转站：将自动请求 {Base URL}/v1/models 动态渲染模型列表" styleClass="info-label"/>
                         <Label text="Access Token / API Key（加密保存）" styleClass="info-label"/>
                         <PasswordField fx:id="tokenField" promptText="未输入则不保存"/>
                         <VBox fx:id="secretKeyBox" spacing="4" managed="false" visible="false">
@@ -148,7 +154,7 @@
                     <!-- 开发者选项 -->
                     <VBox spacing="8" styleClass="status-panel">
                         <Label text="开发者选项" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
-                        <Label text="普通用户建议保持"简洁日志"；开发调试可切换"全面日志"并按分类开启" styleClass="info-label"/>
+                        <Label text="普通用户建议保持&quot;简洁日志&quot;；开发调试可切换&quot;全面日志&quot;并按分类开启" styleClass="info-label"/>
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <RadioButton fx:id="logModeSimple" text="简洁日志"/>
                             <RadioButton fx:id="logModeFull" text="全面日志"/>

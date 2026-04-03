@@ -63,6 +63,7 @@ class UserPreferencesTest {
         assertEquals(7, prefs.getRecordingRetentionDays());
         assertEquals(LLMConfig.ModelType.QIANFAN, prefs.getAiModelType());
         assertEquals("", prefs.getAiModelName());
+        assertEquals("", prefs.getAiBaseUrl());
         assertEquals("", prefs.getAiTokenPlainText());
         assertEquals("", prefs.getSpeechApiKey());
         assertEquals(Set.of(), prefs.getSelectedKwsModelIds());
@@ -77,12 +78,14 @@ class UserPreferencesTest {
         UserPreferences prefs = UserPreferences.builder()
             .keywords("  张三  ")
             .aiModelName("  ")
+            .aiBaseUrl("  https://api.openai.com/  ")
             .aiTokenPlainText(null)
             .speechApiKey(null)
             .build();
 
         assertEquals("张三", prefs.getKeywords());
         assertEquals("", prefs.getAiModelName());
+        assertEquals("https://api.openai.com/", prefs.getAiBaseUrl());
         assertEquals("", prefs.getAiTokenPlainText());
         assertEquals("", prefs.getSpeechApiKey());
     }

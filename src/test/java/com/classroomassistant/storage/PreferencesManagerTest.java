@@ -45,6 +45,7 @@ class PreferencesManagerTest {
             .recordingRetentionDays(14)
             .aiModelType(LLMConfig.ModelType.OPENAI)
             .aiModelName("gpt-4")
+            .aiBaseUrl("https://api.openai.com")
             .aiTokenPlainText("test-token")
             .speechApiKey("speech-key")
             .selectedKwsModelIds(Set.of("model-a", "model-b"))
@@ -64,6 +65,7 @@ class PreferencesManagerTest {
         assertEquals(14, loaded.getRecordingRetentionDays());
         assertEquals(LLMConfig.ModelType.OPENAI, loaded.getAiModelType());
         assertEquals("gpt-4", loaded.getAiModelName());
+        assertEquals("https://api.openai.com", loaded.getAiBaseUrl());
         assertEquals(Set.of("model-a", "model-b"), loaded.getSelectedKwsModelIds());
         assertEquals("model-b", loaded.getCurrentKwsModelId());
         assertFalse(loaded.isAsrModelSelected());

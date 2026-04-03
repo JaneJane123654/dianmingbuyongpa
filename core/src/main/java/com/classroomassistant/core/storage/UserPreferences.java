@@ -7,7 +7,8 @@ import java.util.Set;
 /**
  * 用户偏好设置（平台无关的不可变值对象）
  *
- * <p>字段与 Android 端 SettingsData / src 端 UserPreferences 完全对齐，
+ * <p>
+ * 字段与 Android 端 SettingsData / src 端 UserPreferences 完全对齐，
  * 但不依赖 src 模块的 LLMConfig 枚举，统一用字符串表示 AI 平台类型。
  *
  * @author Code Assistant
@@ -36,6 +37,7 @@ public class UserPreferences {
     // ── AI 问答 ──
     private final String aiModelType;
     private final String aiModelName;
+    private final String aiBaseUrl;
     private final String aiTokenPlainText;
     private final String aiSecretKey;
 
@@ -83,6 +85,7 @@ public class UserPreferences {
         this.recordingRetentionDays = b.recordingRetentionDays;
         this.aiModelType = b.aiModelType;
         this.aiModelName = b.aiModelName;
+        this.aiBaseUrl = b.aiBaseUrl == null ? "" : b.aiBaseUrl;
         this.aiTokenPlainText = b.aiTokenPlainText;
         this.aiSecretKey = b.aiSecretKey == null ? "" : b.aiSecretKey;
         this.speechApiKey = b.speechApiKey;
@@ -90,8 +93,8 @@ public class UserPreferences {
         this.localAsrModelId = b.localAsrModelId == null ? "" : b.localAsrModelId;
         this.cloudWhisperEnabled = b.cloudWhisperEnabled;
         this.selectedKwsModelIds = b.selectedKwsModelIds == null
-            ? Collections.emptySet()
-            : Collections.unmodifiableSet(new LinkedHashSet<>(b.selectedKwsModelIds));
+                ? Collections.emptySet()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(b.selectedKwsModelIds));
         this.currentKwsModelId = b.currentKwsModelId == null ? "" : b.currentKwsModelId.trim();
         this.asrModelSelected = b.asrModelSelected;
         this.vadModelSelected = b.vadModelSelected;
@@ -110,47 +113,151 @@ public class UserPreferences {
 
     // ── Getters ─────────────────────────────────────────────────────────
 
-    public String getKeywords() { return keywords; }
-    public float getKwsThreshold() { return kwsThreshold; }
-    public boolean isVadEnabled() { return vadEnabled; }
-    public int getVadQuietThresholdSeconds() { return vadQuietThresholdSeconds; }
-    public String getQuietAlertMode() { return quietAlertMode; }
-    public boolean isQuietAutoLookbackEnabled() { return quietAutoLookbackEnabled; }
-    public int getQuietAutoLookbackExtraSeconds() { return quietAutoLookbackExtraSeconds; }
-    public int getAudioLookbackSeconds() { return audioLookbackSeconds; }
-    public boolean isRecordingSaveEnabled() { return recordingSaveEnabled; }
-    public int getRecordingRetentionDays() { return recordingRetentionDays; }
-    public String getAiModelType() { return aiModelType; }
-    public String getAiModelName() { return aiModelName; }
-    public String getAiTokenPlainText() { return aiTokenPlainText; }
-    public String getAiSecretKey() { return aiSecretKey; }
-    public String getSpeechApiKey() { return speechApiKey; }
-    public boolean isLocalAsrEnabled() { return localAsrEnabled; }
-    public String getLocalAsrModelId() { return localAsrModelId; }
-    public boolean isCloudWhisperEnabled() { return cloudWhisperEnabled; }
-    public Set<String> getSelectedKwsModelIds() { return selectedKwsModelIds; }
-    public String getCurrentKwsModelId() { return currentKwsModelId; }
-    public boolean isAsrModelSelected() { return asrModelSelected; }
-    public boolean isVadModelSelected() { return vadModelSelected; }
-    public String getWakeAlertMode() { return wakeAlertMode; }
-    public String getLogMode() { return logMode; }
-    public boolean isShowDiagnosticLogs() { return showDiagnosticLogs; }
-    public boolean isShowAudioDeviceLogs() { return showAudioDeviceLogs; }
-    public boolean isShowGainActivityLogs() { return showGainActivityLogs; }
-    public boolean isShowTtsSelfTestLogs() { return showTtsSelfTestLogs; }
-    public boolean isShowHeartbeatLogs() { return showHeartbeatLogs; }
-    public boolean isTtsSelfTestEnabled() { return ttsSelfTestEnabled; }
-    public boolean isBackgroundKeepAliveEnabled() { return backgroundKeepAliveEnabled; }
-    public boolean isAutoStart() { return autoStart; }
-    public String getLanguage() { return language; }
+    public String getKeywords() {
+        return keywords;
+    }
+
+    public float getKwsThreshold() {
+        return kwsThreshold;
+    }
+
+    public boolean isVadEnabled() {
+        return vadEnabled;
+    }
+
+    public int getVadQuietThresholdSeconds() {
+        return vadQuietThresholdSeconds;
+    }
+
+    public String getQuietAlertMode() {
+        return quietAlertMode;
+    }
+
+    public boolean isQuietAutoLookbackEnabled() {
+        return quietAutoLookbackEnabled;
+    }
+
+    public int getQuietAutoLookbackExtraSeconds() {
+        return quietAutoLookbackExtraSeconds;
+    }
+
+    public int getAudioLookbackSeconds() {
+        return audioLookbackSeconds;
+    }
+
+    public boolean isRecordingSaveEnabled() {
+        return recordingSaveEnabled;
+    }
+
+    public int getRecordingRetentionDays() {
+        return recordingRetentionDays;
+    }
+
+    public String getAiModelType() {
+        return aiModelType;
+    }
+
+    public String getAiModelName() {
+        return aiModelName;
+    }
+
+    public String getAiBaseUrl() {
+        return aiBaseUrl;
+    }
+
+    public String getAiTokenPlainText() {
+        return aiTokenPlainText;
+    }
+
+    public String getAiSecretKey() {
+        return aiSecretKey;
+    }
+
+    public String getSpeechApiKey() {
+        return speechApiKey;
+    }
+
+    public boolean isLocalAsrEnabled() {
+        return localAsrEnabled;
+    }
+
+    public String getLocalAsrModelId() {
+        return localAsrModelId;
+    }
+
+    public boolean isCloudWhisperEnabled() {
+        return cloudWhisperEnabled;
+    }
+
+    public Set<String> getSelectedKwsModelIds() {
+        return selectedKwsModelIds;
+    }
+
+    public String getCurrentKwsModelId() {
+        return currentKwsModelId;
+    }
+
+    public boolean isAsrModelSelected() {
+        return asrModelSelected;
+    }
+
+    public boolean isVadModelSelected() {
+        return vadModelSelected;
+    }
+
+    public String getWakeAlertMode() {
+        return wakeAlertMode;
+    }
+
+    public String getLogMode() {
+        return logMode;
+    }
+
+    public boolean isShowDiagnosticLogs() {
+        return showDiagnosticLogs;
+    }
+
+    public boolean isShowAudioDeviceLogs() {
+        return showAudioDeviceLogs;
+    }
+
+    public boolean isShowGainActivityLogs() {
+        return showGainActivityLogs;
+    }
+
+    public boolean isShowTtsSelfTestLogs() {
+        return showTtsSelfTestLogs;
+    }
+
+    public boolean isShowHeartbeatLogs() {
+        return showHeartbeatLogs;
+    }
+
+    public boolean isTtsSelfTestEnabled() {
+        return ttsSelfTestEnabled;
+    }
+
+    public boolean isBackgroundKeepAliveEnabled() {
+        return backgroundKeepAliveEnabled;
+    }
+
+    public boolean isAutoStart() {
+        return autoStart;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
 
     // ── Builder ─────────────────────────────────────────────────────────
 
-    public static Builder builder() { return new Builder(); }
+    public static Builder builder() {
+        return new Builder();
+    }
 
     public static class Builder {
         private String keywords = "";
-        private float kwsThreshold = 0.25f;
+        private float kwsThreshold = 0.05f;
         private boolean vadEnabled = true;
         private int vadQuietThresholdSeconds = 5;
         private String quietAlertMode = "NOTIFICATION_ONLY";
@@ -161,6 +268,7 @@ public class UserPreferences {
         private int recordingRetentionDays = 7;
         private String aiModelType = "QIANFAN";
         private String aiModelName = "";
+        private String aiBaseUrl = "";
         private String aiTokenPlainText = "";
         private String aiSecretKey = "";
         private String speechApiKey = "";
@@ -183,40 +291,178 @@ public class UserPreferences {
         private boolean autoStart = false;
         private String language = "zh-CN";
 
-        public Builder keywords(String v) { this.keywords = v; return this; }
-        public Builder kwsThreshold(float v) { this.kwsThreshold = v; return this; }
-        public Builder vadEnabled(boolean v) { this.vadEnabled = v; return this; }
-        public Builder vadQuietThresholdSeconds(int v) { this.vadQuietThresholdSeconds = v; return this; }
-        public Builder quietAlertMode(String v) { this.quietAlertMode = v; return this; }
-        public Builder quietAutoLookbackEnabled(boolean v) { this.quietAutoLookbackEnabled = v; return this; }
-        public Builder quietAutoLookbackExtraSeconds(int v) { this.quietAutoLookbackExtraSeconds = v; return this; }
-        public Builder audioLookbackSeconds(int v) { this.audioLookbackSeconds = v; return this; }
-        public Builder recordingSaveEnabled(boolean v) { this.recordingSaveEnabled = v; return this; }
-        public Builder recordingRetentionDays(int v) { this.recordingRetentionDays = v; return this; }
-        public Builder aiModelType(String v) { this.aiModelType = v; return this; }
-        public Builder aiModelName(String v) { this.aiModelName = v; return this; }
-        public Builder aiTokenPlainText(String v) { this.aiTokenPlainText = v; return this; }
-        public Builder aiSecretKey(String v) { this.aiSecretKey = v; return this; }
-        public Builder speechApiKey(String v) { this.speechApiKey = v; return this; }
-        public Builder localAsrEnabled(boolean v) { this.localAsrEnabled = v; return this; }
-        public Builder localAsrModelId(String v) { this.localAsrModelId = v; return this; }
-        public Builder cloudWhisperEnabled(boolean v) { this.cloudWhisperEnabled = v; return this; }
-        public Builder selectedKwsModelIds(Set<String> v) { this.selectedKwsModelIds = v; return this; }
-        public Builder currentKwsModelId(String v) { this.currentKwsModelId = v; return this; }
-        public Builder asrModelSelected(boolean v) { this.asrModelSelected = v; return this; }
-        public Builder vadModelSelected(boolean v) { this.vadModelSelected = v; return this; }
-        public Builder wakeAlertMode(String v) { this.wakeAlertMode = v; return this; }
-        public Builder logMode(String v) { this.logMode = v; return this; }
-        public Builder showDiagnosticLogs(boolean v) { this.showDiagnosticLogs = v; return this; }
-        public Builder showAudioDeviceLogs(boolean v) { this.showAudioDeviceLogs = v; return this; }
-        public Builder showGainActivityLogs(boolean v) { this.showGainActivityLogs = v; return this; }
-        public Builder showTtsSelfTestLogs(boolean v) { this.showTtsSelfTestLogs = v; return this; }
-        public Builder showHeartbeatLogs(boolean v) { this.showHeartbeatLogs = v; return this; }
-        public Builder ttsSelfTestEnabled(boolean v) { this.ttsSelfTestEnabled = v; return this; }
-        public Builder backgroundKeepAliveEnabled(boolean v) { this.backgroundKeepAliveEnabled = v; return this; }
-        public Builder autoStart(boolean v) { this.autoStart = v; return this; }
-        public Builder language(String v) { this.language = v; return this; }
+        public Builder keywords(String v) {
+            this.keywords = v;
+            return this;
+        }
 
-        public UserPreferences build() { return new UserPreferences(this); }
+        public Builder kwsThreshold(float v) {
+            this.kwsThreshold = v;
+            return this;
+        }
+
+        public Builder vadEnabled(boolean v) {
+            this.vadEnabled = v;
+            return this;
+        }
+
+        public Builder vadQuietThresholdSeconds(int v) {
+            this.vadQuietThresholdSeconds = v;
+            return this;
+        }
+
+        public Builder quietAlertMode(String v) {
+            this.quietAlertMode = v;
+            return this;
+        }
+
+        public Builder quietAutoLookbackEnabled(boolean v) {
+            this.quietAutoLookbackEnabled = v;
+            return this;
+        }
+
+        public Builder quietAutoLookbackExtraSeconds(int v) {
+            this.quietAutoLookbackExtraSeconds = v;
+            return this;
+        }
+
+        public Builder audioLookbackSeconds(int v) {
+            this.audioLookbackSeconds = v;
+            return this;
+        }
+
+        public Builder recordingSaveEnabled(boolean v) {
+            this.recordingSaveEnabled = v;
+            return this;
+        }
+
+        public Builder recordingRetentionDays(int v) {
+            this.recordingRetentionDays = v;
+            return this;
+        }
+
+        public Builder aiModelType(String v) {
+            this.aiModelType = v;
+            return this;
+        }
+
+        public Builder aiModelName(String v) {
+            this.aiModelName = v;
+            return this;
+        }
+
+        public Builder aiBaseUrl(String v) {
+            this.aiBaseUrl = v;
+            return this;
+        }
+
+        public Builder aiTokenPlainText(String v) {
+            this.aiTokenPlainText = v;
+            return this;
+        }
+
+        public Builder aiSecretKey(String v) {
+            this.aiSecretKey = v;
+            return this;
+        }
+
+        public Builder speechApiKey(String v) {
+            this.speechApiKey = v;
+            return this;
+        }
+
+        public Builder localAsrEnabled(boolean v) {
+            this.localAsrEnabled = v;
+            return this;
+        }
+
+        public Builder localAsrModelId(String v) {
+            this.localAsrModelId = v;
+            return this;
+        }
+
+        public Builder cloudWhisperEnabled(boolean v) {
+            this.cloudWhisperEnabled = v;
+            return this;
+        }
+
+        public Builder selectedKwsModelIds(Set<String> v) {
+            this.selectedKwsModelIds = v;
+            return this;
+        }
+
+        public Builder currentKwsModelId(String v) {
+            this.currentKwsModelId = v;
+            return this;
+        }
+
+        public Builder asrModelSelected(boolean v) {
+            this.asrModelSelected = v;
+            return this;
+        }
+
+        public Builder vadModelSelected(boolean v) {
+            this.vadModelSelected = v;
+            return this;
+        }
+
+        public Builder wakeAlertMode(String v) {
+            this.wakeAlertMode = v;
+            return this;
+        }
+
+        public Builder logMode(String v) {
+            this.logMode = v;
+            return this;
+        }
+
+        public Builder showDiagnosticLogs(boolean v) {
+            this.showDiagnosticLogs = v;
+            return this;
+        }
+
+        public Builder showAudioDeviceLogs(boolean v) {
+            this.showAudioDeviceLogs = v;
+            return this;
+        }
+
+        public Builder showGainActivityLogs(boolean v) {
+            this.showGainActivityLogs = v;
+            return this;
+        }
+
+        public Builder showTtsSelfTestLogs(boolean v) {
+            this.showTtsSelfTestLogs = v;
+            return this;
+        }
+
+        public Builder showHeartbeatLogs(boolean v) {
+            this.showHeartbeatLogs = v;
+            return this;
+        }
+
+        public Builder ttsSelfTestEnabled(boolean v) {
+            this.ttsSelfTestEnabled = v;
+            return this;
+        }
+
+        public Builder backgroundKeepAliveEnabled(boolean v) {
+            this.backgroundKeepAliveEnabled = v;
+            return this;
+        }
+
+        public Builder autoStart(boolean v) {
+            this.autoStart = v;
+            return this;
+        }
+
+        public Builder language(String v) {
+            this.language = v;
+            return this;
+        }
+
+        public UserPreferences build() {
+            return new UserPreferences(this);
+        }
     }
 }

@@ -19,6 +19,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class AndroidSpeechRecognitionService(
@@ -30,22 +31,72 @@ class AndroidSpeechRecognitionService(
         .callTimeout(3, TimeUnit.MINUTES)
         .build()
 ) {
+    private val asrVadGate = LightweightVadGate()
+
     fun recognize(
         pcm16: ByteArray,
         useCloudWhisper: Boolean,
         localAsrEnabled: Boolean,
         speechApiKey: String,
         localModelId: String,
+        enableVadGate: Boolean = true,
         onLog: (String) -> Unit
     ): String {
-        if (useCloudWhisper) {
-            return recognizeByCloudWhisper(pcm16, speechApiKey, onLog)
+        if (pcm16.isEmpty()) {
+            onLog("语音识别跳过：输入音频为空")
+            return ""
         }
-        if (!localAsrEnabled) {
+
+        if (!useCloudWhisper && !localAsrEnabled) {
             onLog("语音识别已关闭：本机ASR关闭且未启用云端Whisper")
             return ""
         }
-        return recognizeByLocalModel(pcm16, localModelId, onLog)
+
+        val pcmForRecognition = if (enableVadGate) {
+            val filtered = applyAsrVadGate(pcm16, onLog)
+            if (filtered == null) {
+                return ""
+            }
+            filtered
+        } else {
+            pcm16
+        }
+
+        if (useCloudWhisper) {
+            return recognizeByCloudWhisper(pcmForRecognition, speechApiKey, onLog)
+        }
+        return recognizeByLocalModel(pcmForRecognition, localModelId, onLog)
+    }
+
+    private fun applyAsrVadGate(
+        pcm16: ByteArray,
+        onLog: (String) -> Unit
+    ): ByteArray? {
+        val startedAt = System.currentTimeMillis()
+        val result = asrVadGate.filter(pcm16)
+        val costMs = System.currentTimeMillis() - startedAt
+
+        if (!result.hasSpeech) {
+            onLog(
+                "ASR前置VAD: 未检测到明确人声，跳过识别（音频=${result.originalDurationMs}ms, " +
+                    "maxRms=${formatRms(result.maxRms)}, noise=${formatRms(result.noiseFloorRms)}, " +
+                    "阈值=${formatRms(result.speechThresholdRms)}, 用时=${costMs}ms）"
+            )
+            return null
+        }
+
+        val speechPercent = String.format(Locale.ROOT, "%.1f", result.speechRatio * 100f)
+        onLog(
+            "ASR前置VAD: 保留语音 ${result.keptDurationMs}ms/${result.originalDurationMs}ms " +
+                "(${speechPercent}%), 分段=${result.segmentCount}, " +
+                "maxRms=${formatRms(result.maxRms)}, noise=${formatRms(result.noiseFloorRms)}, " +
+                "阈值=${formatRms(result.speechThresholdRms)}, 用时=${costMs}ms"
+        )
+        return result.filteredPcm16
+    }
+
+    private fun formatRms(value: Float): String {
+        return String.format(Locale.ROOT, "%.4f", value)
     }
 
     private fun recognizeByLocalModel(

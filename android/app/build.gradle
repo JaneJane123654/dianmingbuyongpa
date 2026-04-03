@@ -72,11 +72,6 @@ dependencies {
     implementation 'org.apache.commons:commons-compress:1.26.1'
     implementation 'com.bihe0832.android:lib-sherpa-onnx:8.2.0'
 
-    // LangChain4j（多模型适配）
-    implementation 'dev.langchain4j:langchain4j:0.34.0'
-    implementation 'dev.langchain4j:langchain4j-open-ai:0.34.0'
-    implementation 'dev.langchain4j:langchain4j-qianfan:0.34.0'
-
     // 协程
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 

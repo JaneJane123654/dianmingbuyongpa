@@ -1,4 +1,4 @@
-﻿﻿package com.classroomassistant.storage;
+package com.classroomassistant.storage;
 
 import java.util.Objects;
 

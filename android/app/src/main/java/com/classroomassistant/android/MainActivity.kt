@@ -73,6 +73,7 @@ private const val KEY_VAD_QUIET_AUTO_LOOKBACK_ENABLED = "vad.quietAutoLookbackEn
 private const val KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS = "vad.quietAutoLookbackExtraSeconds"
 private const val KEY_AI_PROVIDER = "ai.provider"
 private const val KEY_AI_MODEL_NAME = "ai.modelName"
+private const val KEY_AI_BASE_URL = "ai.baseUrl"
 private const val KEY_AI_TOKEN = "ai.token.encrypted"
 private const val KEY_AI_SECRET = "ai.secret.encrypted"
 private const val KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled"
@@ -101,16 +102,76 @@ private const val NOTIFICATION_ID_WAKE = 11001
 private const val NOTIFICATION_ID_QUIET = 11002
 private const val WAKE_STATUS_DISPLAY_MS = 3_000L
 private const val VAD_SPEECH_RMS_THRESHOLD = 0.003f
-private const val LOOKBACK_SECONDS_DEFAULT = 15
+private const val LOOKBACK_SECONDS_DEFAULT = 20
 private const val LOOKBACK_SECONDS_MIN = 8
 private const val LOOKBACK_SECONDS_MAX = 120
 
-private val aiProviders = setOf("OPENAI", "QIANFAN", "DEEPSEEK", "KIMI")
+private val aiProviders = setOf(
+    "OPENAI",
+    "OPENAI_COMPATIBLE",
+    "ANTHROPIC",
+    "GEMINI",
+    "QIANFAN",
+    "DEEPSEEK",
+    "KIMI",
+    "DASHSCOPE",
+    "HUNYUAN",
+    "ZHIPU",
+    "SILICONFLOW",
+    "MINIMAX",
+    "MISTRAL",
+    "GROQ",
+    "COHERE",
+    "OPENROUTER",
+    "AZURE_OPENAI",
+    "BAICHUAN",
+    "YI",
+    "STEPFUN",
+    "XAI",
+    "FIREWORKS",
+    "TOGETHER_AI",
+    "PERPLEXITY",
+    "NOVITA",
+    "REPLICATE",
+    "CEREBRAS",
+    "SAMBANOVA",
+    "OLLAMA",
+    "LMSTUDIO"
+)
 private val logTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 private val wakeNotificationSequence = AtomicInteger(0)
 private val quietNotificationSequence = AtomicInteger(0)
 private const val DEBUG_LISTENING_HEARTBEAT_MS = 10_000L
 private const val RELEASE_LISTENING_HEARTBEAT_MS = 10 * 60 * 1000L
+private val simpleLogNoisePrefixes = setOf(
+    "监听诊断:",
+    "KWS 初始化阶段:",
+    "KWS 配置:",
+    "KWS 使用关键词文件:",
+    "KWS 模型目录:",
+    "文件检查[",
+    "tokens.txt 词表大小:",
+    "关键词文件:",
+    "关键词预览:",
+    "关键词自动扩展:",
+    "自动追加词:",
+    "未找到内置关键词文件",
+    "会话统计:",
+    "⚠ 监听期间检测到微弱语音",
+    "检测结果: keyword=",
+    "语音识别配置：",
+    "回溯音频获取成功：",
+    "识别耗时统计:",
+    "唤醒事件：",
+    "监听启动生效配置",
+    "开始监听前配置检查",
+    "说明：",
+    "当前生效参数:",
+    "VAD:",
+    "模型下载[",
+    "ASR下载[",
+    "AI问答完成:"
+)
 
 private fun formatLogLine(message: String): String {
     val time = LocalDateTime.now().format(logTimeFormatter)
@@ -225,17 +286,18 @@ private fun showQuietNotification(context: Context, alertMode: String, quietSeco
 private fun defaultSettings(): SettingsData {
     return SettingsData(
         keywords = "",
-        kwsThreshold = 0.25f,
+        kwsThreshold = 0.05f,
         vadEnabled = true,
         quietThreshold = 5,
         quietAlertMode = "NOTIFICATION_ONLY",
         quietAutoLookbackEnabled = true,
-        quietAutoLookbackExtraSeconds = 8,
+        quietAutoLookbackExtraSeconds = 20,
         lookbackSeconds = LOOKBACK_SECONDS_DEFAULT,
         recordingSaveEnabled = false,
         retentionDays = 7,
-        aiProvider = "QIANFAN",
+        aiProvider = "OPENAI_COMPATIBLE",
         modelName = "",
+        aiBaseUrl = "",
         apiToken = "",
         apiSecretKey = "",
         speechApiKey = "",
@@ -296,6 +358,36 @@ private fun shouldDisplayEngineLog(message: String, settings: SettingsData): Boo
     }
 }
 
+private fun shouldDisplayUiLog(message: String, settings: SettingsData): Boolean {
+    val text = message.trim()
+    if (text.isBlank()) {
+        return false
+    }
+    if (settings.logMode == "FULL") {
+        return true
+    }
+    if (text.contains("失败") || text.contains("错误") || text.contains("异常") || text.contains("HTTP 401")) {
+        return true
+    }
+    if (simpleLogNoisePrefixes.any { text.startsWith(it) }) {
+        return false
+    }
+    return text.startsWith("应用已启动") ||
+        text.startsWith("开始") ||
+        text.startsWith("停止") ||
+        text.startsWith("检测到唤醒词") ||
+        text.startsWith("语音识别文本:") ||
+        text.startsWith("语音识别结果为空") ||
+        text.startsWith("AI问答") ||
+        text.startsWith("模型下载成功:") ||
+        text.startsWith("本机ASR模型下载成功:") ||
+        text.startsWith("切换当前模型:") ||
+        text.startsWith("后台保活") ||
+        text.startsWith("未配置唤醒词") ||
+        text.startsWith("当前模型未就绪") ||
+        text.startsWith("未选择任何模型")
+}
+
 private fun loadSettings(
     preferences: AndroidPreferences,
     secureStorage: AndroidSecureStorage?
@@ -308,7 +400,7 @@ private fun loadSettings(
     val quietAlertMode = if (quietAlertModeRaw == "SOUND") "SOUND" else "NOTIFICATION_ONLY"
     val logModeRaw = preferences.getString(KEY_LOG_MODE, defaults.logMode) ?: defaults.logMode
     val logMode = if (logModeRaw == "FULL") "FULL" else "SIMPLE"
-    val kwsThreshold = (preferences.getInt(KEY_KWS_TRIGGER_THRESHOLD, 25) / 100f).coerceIn(0.05f, 0.8f)
+    val kwsThreshold = (preferences.getInt(KEY_KWS_TRIGGER_THRESHOLD, 5) / 100f).coerceIn(0.05f, 0.8f)
     val lookbackSeconds = preferences.getInt(KEY_AUDIO_LOOKBACK_SECONDS, defaults.lookbackSeconds)
         .coerceIn(LOOKBACK_SECONDS_MIN, LOOKBACK_SECONDS_MAX)
     val vadEnabled = preferences.getBoolean(KEY_VAD_ENABLED, true)
@@ -323,9 +415,10 @@ private fun loadSettings(
     ).coerceIn(1, 60)
     val recordingSaveEnabled = preferences.getBoolean(KEY_RECORDING_SAVE_ENABLED, false)
     val retentionDays = preferences.getInt(KEY_RECORDING_RETENTION_DAYS, 7).coerceIn(0, 30)
-    val providerRaw = preferences.getString(KEY_AI_PROVIDER, "QIANFAN") ?: "QIANFAN"
-    val aiProvider = if (aiProviders.contains(providerRaw)) providerRaw else "QIANFAN"
+    val providerRaw = preferences.getString(KEY_AI_PROVIDER, "OPENAI_COMPATIBLE") ?: "OPENAI_COMPATIBLE"
+    val aiProvider = if (aiProviders.contains(providerRaw)) providerRaw else "OPENAI_COMPATIBLE"
     val modelName = preferences.getString(KEY_AI_MODEL_NAME, "") ?: ""
+    val aiBaseUrl = preferences.getString(KEY_AI_BASE_URL, "") ?: ""
     val apiToken = secureStorage?.retrieveSecure(KEY_AI_TOKEN) ?: ""
     val apiSecretKey = secureStorage?.retrieveSecure(KEY_AI_SECRET) ?: ""
     val speechApiKey = secureStorage?.retrieveSecure(KEY_SPEECH_API_KEY) ?: ""
@@ -352,6 +445,7 @@ private fun loadSettings(
         retentionDays = retentionDays,
         aiProvider = aiProvider,
         modelName = modelName,
+        aiBaseUrl = aiBaseUrl,
         apiToken = apiToken,
         apiSecretKey = apiSecretKey,
         speechApiKey = speechApiKey,
@@ -391,6 +485,7 @@ private fun saveSettings(
     preferences.putInt(KEY_RECORDING_RETENTION_DAYS, settings.retentionDays)
     preferences.putString(KEY_AI_PROVIDER, settings.aiProvider)
     preferences.putString(KEY_AI_MODEL_NAME, settings.modelName)
+    preferences.putString(KEY_AI_BASE_URL, settings.aiBaseUrl.trim())
     preferences.putBoolean(KEY_ASR_LOCAL_ENABLED, settings.localAsrEnabled)
     preferences.putString(KEY_ASR_LOCAL_MODEL_ID, settings.localAsrModelId)
     preferences.putBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, settings.cloudWhisperEnabled)
@@ -610,6 +705,7 @@ fun AppNavigation(
         mutableStateOf(availableAsrModels.associate { it.id to "" })
     }
     var isDownloadingAsr by remember { mutableStateOf(false) }
+    var pendingAsrDownloadModelId by remember { mutableStateOf<String?>(null) }
     val audioRecorder = runtimeDependencies.audioRecorder
     val wakeWordEngine = runtimeDependencies.wakeWordEngine
     var isMonitoring by remember { mutableStateOf(false) }
@@ -629,6 +725,7 @@ fun AppNavigation(
     val vadTimeoutNotified = remember { AtomicBoolean(false) }
     val vadLastTimedOutQuietDurationSec = remember { AtomicLong(0L) }
     val asrInProgress = remember { AtomicBoolean(false) }
+    val pendingWakeRecognition = remember { AtomicBoolean(false) }
     var lastAutoDownloadedAsrModelId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -653,15 +750,20 @@ fun AppNavigation(
     }
 
     fun appendLog(message: String) {
-        val line = formatLogLine(message)
+        val normalizedMessage = message.trim()
+        if (!shouldDisplayUiLog(normalizedMessage, settings)) {
+            return
+        }
+        val line = formatLogLine(normalizedMessage)
+        val maxLines = if (settings.logMode == "FULL") 500 else 120
         mainHandler.post {
             logText = if (logText == "日志输出..." || logText.isBlank()) {
                 line
             } else {
                 val combined = "$logText\n$line"
                 val lines = combined.split("\n")
-                if (lines.size > 500) {
-                    lines.takeLast(500).joinToString("\n")
+                if (lines.size > maxLines) {
+                    lines.takeLast(maxLines).joinToString("\n")
                 } else {
                     combined
                 }
@@ -742,6 +844,7 @@ fun AppNavigation(
         preferences.flush()
         currentModelReady = modelManager.isModelReady(modelId)
         appendLog("切换当前模型: ${availableModels.firstOrNull { it.id == modelId }?.name ?: modelId}")
+        appendLog("生效说明：唤醒仅使用“当前模型”，勾选列表仅用于批量下载缓存")
     }
 
     fun toggleModelSelection(modelId: String, isChecked: Boolean) {
@@ -759,6 +862,36 @@ fun AppNavigation(
         return message ?: error?.javaClass?.simpleName ?: "未知错误"
     }
 
+    fun resolveKwsModelName(modelId: String): String {
+        return availableModels.firstOrNull { it.id == modelId }?.name ?: modelId
+    }
+
+    fun resolveAsrModelId(modelId: String): String {
+        return modelId.ifBlank { defaultAsrModelId }
+    }
+
+    fun resolveAsrModelName(modelId: String): String {
+        return availableAsrModels.firstOrNull { it.id == modelId }?.name ?: modelId
+    }
+
+    fun buildAsrRouteSummary(startSettings: SettingsData): String {
+        val resolvedAsrModelId = resolveAsrModelId(startSettings.localAsrModelId)
+        val resolvedAsrModelName = resolveAsrModelName(resolvedAsrModelId)
+        return when {
+            startSettings.cloudWhisperEnabled && startSettings.localAsrEnabled ->
+                "云端Whisper优先，本机ASR候选=$resolvedAsrModelName($resolvedAsrModelId)"
+            startSettings.cloudWhisperEnabled -> "云端Whisper"
+            startSettings.localAsrEnabled -> "本机ASR=$resolvedAsrModelName($resolvedAsrModelId)"
+            else -> "已关闭"
+        }
+    }
+
+    fun appendActivePipelineLog(prefix: String, startSettings: SettingsData = settings) {
+        appendLog(
+            "$prefix: 唤醒模型=${resolveKwsModelName(currentModelId)}($currentModelId), 语音识别=${buildAsrRouteSummary(startSettings)}"
+        )
+    }
+
     fun updateAsrModelStatus(modelId: String, status: String, progress: Float = 0f) {
         asrModelStatusMap = asrModelStatusMap.toMutableMap().apply { put(modelId, status) }
         asrModelProgressMap = asrModelProgressMap.toMutableMap().apply { put(modelId, progress) }
@@ -766,7 +899,11 @@ fun AppNavigation(
 
     fun refreshAsrModelStatus() {
         asrModelStatusMap = availableAsrModels.associate { option ->
-            option.id to if (asrModelManager.isModelReady(option.id)) "已就绪" else "未下载"
+            option.id to when {
+                asrModelManager.isModelReady(option.id) -> "已就绪"
+                pendingAsrDownloadModelId == option.id -> "排队中"
+                else -> "未下载"
+            }
         }
         asrModelProgressMap = asrModelProgressMap.toMutableMap().apply {
             availableAsrModels.forEach { option ->
@@ -778,25 +915,44 @@ fun AppNavigation(
     }
 
     fun downloadAsrModel(modelId: String, reason: String = "用户触发") {
+        val modelName = availableAsrModels.firstOrNull { it.id == modelId }?.name ?: modelId
         if (isDownloadingAsr) {
-            appendLog("ASR 模型下载任务进行中，稍后再试")
+            if (pendingAsrDownloadModelId == modelId) {
+                appendLog("本机ASR模型已在排队中: $modelName")
+                return
+            }
+            pendingAsrDownloadModelId = modelId
+            updateAsrModelStatus(modelId, "排队中", 0f)
+            appendLog("ASR 模型下载任务进行中，已加入队列: $modelName")
             return
         }
         isDownloadingAsr = true
-        val modelName = availableAsrModels.firstOrNull { it.id == modelId }?.name ?: modelId
+        if (pendingAsrDownloadModelId == modelId) {
+            pendingAsrDownloadModelId = null
+        }
         appendLog("开始下载本机ASR模型($reason): $modelName")
         coroutineScope.launch(Dispatchers.IO) {
             mainHandler.post {
                 updateAsrModelStatus(modelId, "下载中", 0f)
                 asrModelFailureMap = asrModelFailureMap.toMutableMap().apply { put(modelId, "") }
             }
-            val result = asrModelManager.downloadAndPrepare(modelId) { downloaded, total ->
-                val progress = if (total > 0) downloaded.toFloat() / total else 0f
-                mainHandler.post {
-                    val status = if (total > 0) "下载中 ${(progress * 100).toInt()}%" else "下载中"
-                    updateAsrModelStatus(modelId, status, progress)
+            val result = asrModelManager.downloadAndPrepare(
+                modelId = modelId,
+                onProgress = { downloaded, total ->
+                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                    mainHandler.post {
+                        val status = when {
+                            total > 0 && progress >= 0.999f -> "下载完成，处理中"
+                            total > 0 -> "下载中 ${(progress * 100).toInt()}%"
+                            else -> "下载中"
+                        }
+                        updateAsrModelStatus(modelId, status, progress)
+                    }
+                },
+                onEvent = { event ->
+                    appendLog("ASR下载[$modelName]: $event")
                 }
-            }
+            )
             withContext(Dispatchers.Main) {
                 isDownloadingAsr = false
                 if (result.isSuccess) {
@@ -808,6 +964,11 @@ fun AppNavigation(
                     val failReason = buildFailureReason(result.exceptionOrNull())
                     asrModelFailureMap = asrModelFailureMap.toMutableMap().apply { put(modelId, failReason) }
                     appendLog("本机ASR模型下载失败: $modelName, 原因: $failReason")
+                }
+                val queuedModelId = pendingAsrDownloadModelId
+                if (!queuedModelId.isNullOrBlank() && queuedModelId != modelId) {
+                    pendingAsrDownloadModelId = null
+                    downloadAsrModel(queuedModelId, "排队自动开始")
                 }
             }
         }
@@ -824,6 +985,9 @@ fun AppNavigation(
             return
         }
         isDownloading = true
+        appendLog(
+            "批量下载唤醒模型: 已选${targets.size}个，当前生效唤醒模型=${resolveKwsModelName(currentModelId)}($currentModelId)"
+        )
         coroutineScope.launch(Dispatchers.IO) {
             for (modelId in targets) {
                 val modelName = availableModels.firstOrNull { it.id == modelId }?.name ?: modelId
@@ -837,13 +1001,23 @@ fun AppNavigation(
                     modelFailureMap = modelFailureMap.toMutableMap().apply { put(modelId, "") }
                 }
                 appendLog("开始下载模型: $modelName")
-                val result = modelManager.downloadAndPrepare(modelId) { downloaded, total ->
-                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
-                    mainHandler.post {
-                        val status = if (total > 0) "下载中 ${(progress * 100).toInt()}%" else "下载中"
-                        updateModelStatus(modelId, status, progress)
+                val result = modelManager.downloadAndPrepare(
+                    modelId = modelId,
+                    onProgress = { downloaded, total ->
+                        val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                        mainHandler.post {
+                            val status = when {
+                                total > 0 && progress >= 0.999f -> "下载完成，处理中"
+                                total > 0 -> "下载中 ${(progress * 100).toInt()}%"
+                                else -> "下载中"
+                            }
+                            updateModelStatus(modelId, status, progress)
+                        }
+                    },
+                    onEvent = { event ->
+                        appendLog("模型下载[$modelName]: $event")
                     }
-                }
+                )
                 mainHandler.post {
                     if (result.isSuccess) {
                         updateModelStatus(modelId, "已就绪", 1f)
@@ -887,13 +1061,23 @@ fun AppNavigation(
                 updateModelStatus(modelId, "下载中", 0f)
                 modelFailureMap = modelFailureMap.toMutableMap().apply { put(modelId, "") }
             }
-            val result = modelManager.downloadAndPrepare(modelId) { downloaded, total ->
-                val progress = if (total > 0) downloaded.toFloat() / total else 0f
-                mainHandler.post {
-                    val status = if (total > 0) "下载中 ${(progress * 100).toInt()}%" else "下载中"
-                    updateModelStatus(modelId, status, progress)
+            val result = modelManager.downloadAndPrepare(
+                modelId = modelId,
+                onProgress = { downloaded, total ->
+                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                    mainHandler.post {
+                        val status = when {
+                            total > 0 && progress >= 0.999f -> "下载完成，处理中"
+                            total > 0 -> "下载中 ${(progress * 100).toInt()}%"
+                            else -> "下载中"
+                        }
+                        updateModelStatus(modelId, status, progress)
+                    }
+                },
+                onEvent = { event ->
+                    appendLog("模型下载[$modelName]: $event")
                 }
-            }
+            )
             withContext(Dispatchers.Main) {
                 isDownloading = false
                 if (result.isSuccess) {
@@ -918,6 +1102,8 @@ fun AppNavigation(
         wakeStatusResetRunnable = null
         wakeWordEngine.stop { appendLog(it) }
         ListeningKeepAliveService.stop(context.applicationContext)
+        asrInProgress.set(false)
+        pendingWakeRecognition.set(false)
         isMonitoring = false
         isStarting = false
         statusText = "空闲"
@@ -959,6 +1145,7 @@ fun AppNavigation(
                 val answer = aiAnswerService.generateAnswer(
                     provider = startSettings.aiProvider,
                     modelName = startSettings.modelName,
+                    baseUrl = startSettings.aiBaseUrl,
                     apiToken = startSettings.apiToken,
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
@@ -1001,6 +1188,7 @@ fun AppNavigation(
                 val answer = aiAnswerService.generateAnswer(
                     provider = startSettings.aiProvider,
                     modelName = startSettings.modelName,
+                    baseUrl = startSettings.aiBaseUrl,
                     apiToken = startSettings.apiToken,
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
@@ -1023,7 +1211,10 @@ fun AppNavigation(
 
     fun triggerSpeechRecognitionAfterWake(startSettings: SettingsData) {
         if (!asrInProgress.compareAndSet(false, true)) {
-            appendLog("语音识别仍在处理中，忽略本次触发")
+            val alreadyPending = pendingWakeRecognition.getAndSet(true)
+            if (!alreadyPending) {
+                appendLog("语音识别仍在处理中，已记录本次触发，当前识别结束后自动补跑一次")
+            }
             return
         }
         coroutineScope.launch(Dispatchers.IO) {
@@ -1032,18 +1223,20 @@ fun AppNavigation(
                 appendLog("唤醒后处理开始：回溯音频 -> 语音识别 -> AI问答")
                 val useCloudWhisper = startSettings.cloudWhisperEnabled
                 val useLocalAsr = startSettings.localAsrEnabled
+                val resolvedAsrModelId = resolveAsrModelId(startSettings.localAsrModelId)
+                val resolvedAsrModelName = resolveAsrModelName(resolvedAsrModelId)
                 appendLog(
-                    "语音识别配置：cloudWhisper=${if (useCloudWhisper) "开" else "关"}, localAsr=${if (useLocalAsr) "开" else "关"}, model=${startSettings.localAsrModelId}"
+                    "语音识别配置：cloudWhisper=${if (useCloudWhisper) "开" else "关"}, localAsr=${if (useLocalAsr) "开" else "关"}, localModel=$resolvedAsrModelName($resolvedAsrModelId)"
                 )
                 if (!useCloudWhisper && !useLocalAsr) {
                     appendLog("语音识别跳过：本机识别与云端Whisper均未开启")
                     return@launch
                 }
 
-                if (!useCloudWhisper && useLocalAsr && !asrModelManager.isModelReady(startSettings.localAsrModelId)) {
-                    appendLog("本机ASR模型未就绪，准备自动下载: ${startSettings.localAsrModelId}")
+                if (!useCloudWhisper && useLocalAsr && !asrModelManager.isModelReady(resolvedAsrModelId)) {
+                    appendLog("本机ASR模型未就绪，准备自动下载: $resolvedAsrModelName($resolvedAsrModelId)")
                     withContext(Dispatchers.Main) {
-                        downloadAsrModel(startSettings.localAsrModelId, "唤醒触发自动下载")
+                        downloadAsrModel(resolvedAsrModelId, "唤醒触发自动下载")
                     }
                     appendLog("语音识别跳过：本次触发仅执行模型下载，待模型就绪后下次唤醒再识别")
                     return@launch
@@ -1090,7 +1283,8 @@ fun AppNavigation(
                     useCloudWhisper = useCloudWhisper,
                     localAsrEnabled = useLocalAsr,
                     speechApiKey = startSettings.speechApiKey,
-                    localModelId = startSettings.localAsrModelId,
+                    localModelId = resolvedAsrModelId,
+                    enableVadGate = startSettings.vadEnabled,
                     onLog = { appendLog(it) }
                 )
                 val asrCostMs = System.currentTimeMillis() - asrStartedAt
@@ -1114,6 +1308,14 @@ fun AppNavigation(
                 appendLog("语音识别异常: ${t.message ?: t.javaClass.simpleName}")
             } finally {
                 asrInProgress.set(false)
+                if (pendingWakeRecognition.compareAndSet(true, false)) {
+                    if (isMonitoring && wakeWordEngine.isRunning()) {
+                        appendLog("处理积压唤醒事件：自动补跑一次唤醒后识别")
+                        triggerSpeechRecognitionAfterWake(settings)
+                    } else {
+                        appendLog("监听已停止，丢弃积压唤醒事件")
+                    }
+                }
             }
         }
     }
@@ -1141,6 +1343,8 @@ fun AppNavigation(
         } else {
             appendLog("VAD 已关闭")
         }
+        appendActivePipelineLog("监听启动生效配置", startSettings)
+        appendLog("说明：即使已下载多个唤醒模型，监听时仅使用当前模型")
         if (startSettings.backgroundKeepAliveEnabled) {
             startKeepAliveIfEnabled()
             appendLog("后台保活已启用")
@@ -1253,6 +1457,7 @@ fun AppNavigation(
         statusText = "监听中..."
         AppCrashMonitor.markListeningStage(context.applicationContext, "CLICK_START_LISTENING")
         appendLog("开始本地监听，唤醒词: ${startSettings.keywords.ifBlank { "未设置" }}")
+        appendActivePipelineLog("开始监听前配置检查", startSettings)
         if (!currentModelReady) {
             appendLog("当前模型未就绪，准备下载")
             statusText = "下载模型中..."
@@ -1465,6 +1670,7 @@ fun AppNavigation(
                 currentModelReady = currentModelReady,
                 currentModelFailureReason = modelFailureMap[currentModelId].orEmpty(),
                 currentModelProgress = modelProgressMap[currentModelId] ?: 0f,
+                currentAsrRouteSummary = buildAsrRouteSummary(settings),
                 isDownloading = isDownloading,
                 recognitionText = recognitionText,
                 aiAnswerText = aiAnswerText,
@@ -1496,6 +1702,7 @@ fun AppNavigation(
                     saveSettings(preferences, secureStorage, normalizedSettings)
                     settings = normalizedSettings
                     appendLog("保存设置成功（唤醒词触发值=${String.format("%.2f", normalizedSettings.kwsThreshold)}）")
+                    appendActivePipelineLog("保存后生效配置", normalizedSettings)
                     if (wasListening) {
                         if (normalizedSettings.backgroundKeepAliveEnabled) {
                             startKeepAliveIfEnabled()
@@ -1550,6 +1757,7 @@ fun MainScreen(
     currentModelReady: Boolean,
     currentModelFailureReason: String,
     currentModelProgress: Float,
+    currentAsrRouteSummary: String,
     isDownloading: Boolean,
     recognitionText: String,
     aiAnswerText: String,
@@ -1657,6 +1865,12 @@ fun MainScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "语音识别路线：$currentAsrRouteSummary",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         if (currentModelStatus == "失败" && currentModelFailureReason.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -1703,13 +1917,15 @@ fun MainScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { onRunTtsSelfTest() },
-                    enabled = isMonitoring && !isStarting && !isDownloading && hasKeywords,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("运行 TTS 综合自测")
+                if (latestSettings.ttsSelfTestEnabled) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { onRunTtsSelfTest() },
+                        enabled = isMonitoring && !isStarting && !isDownloading && hasKeywords,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("运行 TTS 综合自测")
+                    }
                 }
                 if (!hasKeywords) {
                     Spacer(modifier = Modifier.height(10.dp))
