@@ -39,6 +39,7 @@ class AndroidSpeechRecognitionService(
         localAsrEnabled: Boolean,
         speechApiKey: String,
         localModelId: String,
+        cloudWhisperLanguage: String = "zh",
         enableVadGate: Boolean = true,
         onLog: (String) -> Unit
     ): String {
@@ -63,7 +64,7 @@ class AndroidSpeechRecognitionService(
         }
 
         if (useCloudWhisper) {
-            return recognizeByCloudWhisper(pcmForRecognition, speechApiKey, onLog)
+            return recognizeByCloudWhisper(pcmForRecognition, speechApiKey, cloudWhisperLanguage, onLog)
         }
         return recognizeByLocalModel(pcmForRecognition, localModelId, onLog)
     }
@@ -238,6 +239,7 @@ class AndroidSpeechRecognitionService(
     private fun recognizeByCloudWhisper(
         pcm16: ByteArray,
         apiKey: String,
+        language: String,
         onLog: (String) -> Unit
     ): String {
         if (apiKey.isBlank()) {
@@ -248,7 +250,7 @@ class AndroidSpeechRecognitionService(
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", "whisper-large-v3-turbo")
-            .addFormDataPart("language", "zh")
+            .addFormDataPart("language", language.ifBlank { "zh" })
             .addFormDataPart("response_format", "json")
             .addFormDataPart("temperature", "0")
             .addFormDataPart(

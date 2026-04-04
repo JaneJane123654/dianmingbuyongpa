@@ -56,3 +56,7 @@ desktop/.tmp/
 desktop/kotlin-compile-current.exit
 desktop/compile_kotlin.exit
 src/main/resources/config/application.properties
+
+# Signing secrets (local only)
+.signing_secrets
+*.keystore

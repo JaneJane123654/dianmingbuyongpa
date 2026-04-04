@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -44,25 +45,33 @@ import com.classroomassistant.android.platform.AndroidPreferences
 import com.classroomassistant.android.platform.AndroidSecureStorage
 import com.classroomassistant.android.platform.AndroidStorage
 import com.classroomassistant.android.platform.AppCrashMonitor
+import com.classroomassistant.android.ui.AppLanguage
+import com.classroomassistant.android.ui.resolveEffectiveLanguage
 import com.classroomassistant.android.speech.AndroidSpeechRecognitionService
 import com.classroomassistant.android.speech.AndroidWakeWordEngine
 import com.classroomassistant.android.ui.SettingsData
 import com.classroomassistant.android.ui.SettingsScreen
+import com.classroomassistant.android.ui.tr
 import com.classroomassistant.android.ui.theme.ClassroomAssistantTheme
 import com.classroomassistant.core.audio.AudioFormatSpec
 import com.classroomassistant.core.ai.PromptTemplate
+import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.TimeUnit
 
 private const val KEY_KEYWORDS = "user.keywords"
 private const val KEY_AUDIO_LOOKBACK_SECONDS = "audio.lookbackSeconds"
@@ -94,6 +103,14 @@ private const val KEY_LOG_SHOW_TTS_SELF_TEST = "developer.log.showTtsSelfTest"
 private const val KEY_LOG_SHOW_HEARTBEAT = "developer.log.showHeartbeat"
 private const val KEY_TTS_SELF_TEST_ENABLED = "developer.tts.selfTest.enabled"
 private const val KEY_BACKGROUND_KEEPALIVE_ENABLED = "listening.backgroundKeepAliveEnabled"
+private const val KEY_APP_LANGUAGE = "app.language"
+private const val KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE = "app.update.ignoreBeforeVersionCode"
+private const val KEY_UPDATE_LAST_PROMPTED_VERSION_CODE = "app.update.lastPromptedVersionCode"
+private const val KEY_PENDING_UPDATE_APK_PATH = "app.update.pendingApkPath"
+private const val UPDATE_GITHUB_REPO = "JaneJane123654/dianmingbuyongpa"
+private const val UPDATE_RELEASES_API_URL = "https://api.github.com/repos/$UPDATE_GITHUB_REPO/releases/latest"
+private const val UPDATE_RELEASES_WEB_URL = "https://github.com/$UPDATE_GITHUB_REPO/releases"
+private const val FILE_PROVIDER_AUTHORITY_SUFFIX = ".fileprovider"
 private const val NOTIFICATION_CHANNEL_WAKE_SILENT = "wake_alert_silent"
 private const val NOTIFICATION_CHANNEL_WAKE_SOUND = "wake_alert_sound"
 private const val NOTIFICATION_CHANNEL_QUIET_SILENT = "quiet_alert_silent"
@@ -283,6 +300,197 @@ private fun showQuietNotification(context: Context, alertMode: String, quietSeco
     return true
 }
 
+private data class UpdateReleaseAsset(
+    val name: String,
+    val downloadUrl: String
+)
+
+private data class UpdateReleaseInfo(
+    val tagName: String,
+    val title: String,
+    val notes: String,
+    val htmlUrl: String,
+    val versionKey: Long,
+    val apkAsset: UpdateReleaseAsset?
+)
+
+private fun parseVersionParts(rawVersion: String): List<Int> {
+    return Regex("\\d+").findAll(rawVersion)
+        .mapNotNull { match ->
+            runCatching { match.value.toInt() }.getOrNull()
+        }
+        .toList()
+}
+
+private fun buildVersionKey(rawVersion: String): Long {
+    val parts = parseVersionParts(rawVersion)
+    if (parts.isEmpty()) {
+        return 0L
+    }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return major * 1_000_000L + minor * 1_000L + patch.toLong()
+}
+
+private fun compareVersionNames(left: String, right: String): Int {
+    val leftParts = parseVersionParts(left)
+    val rightParts = parseVersionParts(right)
+    val maxSize = maxOf(leftParts.size, rightParts.size)
+    for (index in 0 until maxSize) {
+        val leftPart = leftParts.getOrElse(index) { 0 }
+        val rightPart = rightParts.getOrElse(index) { 0 }
+        if (leftPart != rightPart) {
+            return leftPart.compareTo(rightPart)
+        }
+    }
+    return 0
+}
+
+private fun currentAppVersionName(context: Context): String {
+    return runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
+    }.getOrDefault("0.0.0")
+}
+
+private fun parseLatestReleaseInfo(jsonText: String): UpdateReleaseInfo? {
+    return runCatching {
+        val root = JsonParser.parseString(jsonText).asJsonObject
+        val tagName = root.get("tag_name")?.asString?.trim().orEmpty()
+        if (tagName.isBlank()) {
+            return@runCatching null
+        }
+        val title = root.get("name")?.asString?.trim().orEmpty().ifBlank { tagName }
+        val notes = root.get("body")?.asString.orEmpty()
+        val htmlUrl = root.get("html_url")?.asString?.trim().orEmpty().ifBlank { UPDATE_RELEASES_WEB_URL }
+        val assets = root.getAsJsonArray("assets")
+        var apkAsset: UpdateReleaseAsset? = null
+        assets?.forEach { element ->
+            if (apkAsset != null || !element.isJsonObject) {
+                return@forEach
+            }
+            val obj = element.asJsonObject
+            val assetName = obj.get("name")?.asString?.trim().orEmpty()
+            val downloadUrl = obj.get("browser_download_url")?.asString?.trim().orEmpty()
+            if (assetName.endsWith(".apk", ignoreCase = true) && downloadUrl.isNotBlank()) {
+                apkAsset = UpdateReleaseAsset(assetName, downloadUrl)
+            }
+        }
+        UpdateReleaseInfo(
+            tagName = tagName,
+            title = title,
+            notes = notes,
+            htmlUrl = htmlUrl,
+            versionKey = buildVersionKey(tagName),
+            apkAsset = apkAsset
+        )
+    }.getOrNull()
+}
+
+private fun fetchLatestReleaseInfo(client: OkHttpClient): UpdateReleaseInfo {
+    val request = Request.Builder()
+        .url(UPDATE_RELEASES_API_URL)
+        .addHeader("Accept", "application/vnd.github+json")
+        .addHeader("User-Agent", "ClassroomAssistant-Android")
+        .build()
+    client.newCall(request).execute().use { response ->
+        val bodyText = response.body?.string().orEmpty()
+        if (!response.isSuccessful) {
+            throw IOException("检查更新失败: HTTP ${response.code}")
+        }
+        return parseLatestReleaseInfo(bodyText)
+            ?: throw IOException("检查更新失败: 解析发布信息失败")
+    }
+}
+
+private fun hasNewerRelease(localVersionName: String, remoteTagName: String): Boolean {
+    return compareVersionNames(remoteTagName, localVersionName) > 0
+}
+
+private fun safeDeleteDownloadedApk(context: Context, absolutePath: String): Boolean {
+    return runCatching {
+        val file = File(absolutePath).canonicalFile
+        val updatesDir = File(context.cacheDir, "updates").canonicalFile
+        val updatesPrefix = updatesDir.path + File.separator
+        if (!file.path.startsWith(updatesPrefix)) {
+            return@runCatching false
+        }
+        if (!file.name.endsWith(".apk", ignoreCase = true)) {
+            return@runCatching false
+        }
+        file.delete() || !file.exists()
+    }.getOrDefault(false)
+}
+
+private fun cleanupPendingInstallerPackage(
+    context: Context,
+    preferences: AndroidPreferences,
+    onLog: (String) -> Unit
+) {
+    val pendingPath = preferences.getString(KEY_PENDING_UPDATE_APK_PATH, "").orEmpty().trim()
+    if (pendingPath.isBlank()) {
+        return
+    }
+    val deleted = safeDeleteDownloadedApk(context, pendingPath)
+    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
+    preferences.flush()
+    if (deleted) {
+        onLog("已清理旧更新安装包")
+    } else {
+        onLog("旧更新安装包不存在或不在安全目录，已跳过删除")
+    }
+}
+
+private fun startApkInstallIntent(context: Context, apkFile: File) {
+    val apkUri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}$FILE_PROVIDER_AUTHORITY_SUFFIX",
+        apkFile
+    )
+    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        setDataAndType(apkUri, "application/vnd.android.package-archive")
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(intent)
+}
+
+private fun sanitizeFileName(raw: String): String {
+    val sanitized = raw.replace(Regex("[^A-Za-z0-9._-]"), "_")
+    return if (sanitized.isBlank()) "release" else sanitized
+}
+
+private fun downloadReleaseApk(
+    client: OkHttpClient,
+    context: Context,
+    releaseTag: String,
+    asset: UpdateReleaseAsset
+): File {
+    val updatesDir = File(context.cacheDir, "updates")
+    if (!updatesDir.exists()) {
+        updatesDir.mkdirs()
+    }
+    val fileName = "${sanitizeFileName(releaseTag)}-${sanitizeFileName(asset.name)}"
+    val targetFile = File(updatesDir, fileName)
+    val request = Request.Builder()
+        .url(asset.downloadUrl)
+        .addHeader("Accept", "application/octet-stream")
+        .addHeader("User-Agent", "ClassroomAssistant-Android")
+        .build()
+    client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) {
+            throw IOException("下载更新包失败: HTTP ${response.code}")
+        }
+        val body = response.body ?: throw IOException("下载更新包失败: 响应体为空")
+        body.byteStream().use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+    return targetFile
+}
+
 private fun defaultSettings(): SettingsData {
     return SettingsData(
         keywords = "",
@@ -311,8 +519,9 @@ private fun defaultSettings(): SettingsData {
         showGainActivityLogs = false,
         showTtsSelfTestLogs = false,
         showHeartbeatLogs = false,
-            ttsSelfTestEnabled = false,
-        backgroundKeepAliveEnabled = true
+        ttsSelfTestEnabled = false,
+        backgroundKeepAliveEnabled = true,
+        appLanguage = AppLanguage.AUTO
     )
 }
 
@@ -432,6 +641,7 @@ private fun loadSettings(
     val showHeartbeatLogs = preferences.getBoolean(KEY_LOG_SHOW_HEARTBEAT, defaults.showHeartbeatLogs)
     val ttsSelfTestEnabled = preferences.getBoolean(KEY_TTS_SELF_TEST_ENABLED, defaults.ttsSelfTestEnabled)
     val backgroundKeepAliveEnabled = preferences.getBoolean(KEY_BACKGROUND_KEEPALIVE_ENABLED, defaults.backgroundKeepAliveEnabled)
+    val appLanguage = AppLanguage.fromCode(preferences.getString(KEY_APP_LANGUAGE, defaults.appLanguage.code))
     return SettingsData(
         keywords = keywords,
         kwsThreshold = kwsThreshold,
@@ -460,7 +670,8 @@ private fun loadSettings(
         showTtsSelfTestLogs = showTtsSelfTestLogs,
         showHeartbeatLogs = showHeartbeatLogs,
         ttsSelfTestEnabled = ttsSelfTestEnabled,
-        backgroundKeepAliveEnabled = backgroundKeepAliveEnabled
+        backgroundKeepAliveEnabled = backgroundKeepAliveEnabled,
+        appLanguage = appLanguage
     )
 }
 
@@ -498,6 +709,7 @@ private fun saveSettings(
     preferences.putBoolean(KEY_LOG_SHOW_HEARTBEAT, settings.showHeartbeatLogs)
     preferences.putBoolean(KEY_TTS_SELF_TEST_ENABLED, settings.ttsSelfTestEnabled)
     preferences.putBoolean(KEY_BACKGROUND_KEEPALIVE_ENABLED, settings.backgroundKeepAliveEnabled)
+    preferences.putString(KEY_APP_LANGUAGE, settings.appLanguage.code)
     secureStorage?.storeSecure(KEY_AI_TOKEN, settings.apiToken)
     secureStorage?.storeSecure(KEY_AI_SECRET, settings.apiSecretKey)
     secureStorage?.storeSecure(KEY_SPEECH_API_KEY, settings.speechApiKey)
@@ -532,6 +744,18 @@ class MainActivity : ComponentActivity() {
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
+
+    override fun onResume() {
+        super.onResume()
+        runCatching {
+            val preferences = AndroidPreferences(applicationContext)
+            cleanupPendingInstallerPackage(applicationContext, preferences) {
+                android.util.Log.i("MainActivity", it)
+            }
+        }.onFailure {
+            android.util.Log.w("MainActivity", "清理安装包失败", it)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -715,6 +939,25 @@ fun AppNavigation(
     var activeListeningModelId by remember { mutableStateOf<String?>(null) }
     var secureStorage by remember { mutableStateOf<AndroidSecureStorage?>(null) }
     var settings by remember { mutableStateOf(defaultSettings()) }
+    val effectiveLanguage by remember(settings.appLanguage) {
+        mutableStateOf(resolveEffectiveLanguage(settings.appLanguage))
+    }
+    fun t(zhText: String, enText: String): String = tr(effectiveLanguage, zhText, enText)
+    val releaseHttpClient = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build()
+    }
+    var updateStatusMessage by remember { mutableStateOf("") }
+    var pendingUpdateInfo by remember { mutableStateOf<UpdateReleaseInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var isInstallingUpdate by remember { mutableStateOf(false) }
+    var hasAutoCheckedUpdate by remember { mutableStateOf(false) }
+    var settingsLoaded by remember { mutableStateOf(false) }
     var logVersion by remember { mutableStateOf(0) }
     var logText by remember { mutableStateOf("日志输出...") }
     var recognitionText by remember { mutableStateOf("") }
@@ -790,6 +1033,171 @@ fun AppNavigation(
     fun appendEngineLog(message: String) {
         if (shouldDisplayEngineLog(message, settings)) {
             appendLog(message)
+        }
+    }
+
+    fun markReleaseIgnored(release: UpdateReleaseInfo) {
+        if (release.versionKey <= 0L) {
+            return
+        }
+        preferences.putLong(KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE, release.versionKey)
+        preferences.putLong(KEY_UPDATE_LAST_PROMPTED_VERSION_CODE, release.versionKey)
+        preferences.flush()
+    }
+
+    fun clearReleaseIgnoreIfNeeded(release: UpdateReleaseInfo) {
+        val ignoredBeforeVersion = preferences.getLong(KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE, 0L)
+        if (ignoredBeforeVersion > 0L && release.versionKey > ignoredBeforeVersion) {
+            preferences.remove(KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE)
+            preferences.flush()
+        }
+    }
+
+    fun shouldSkipPromptByUserChoice(release: UpdateReleaseInfo): Boolean {
+        val ignoredBeforeVersion = preferences.getLong(KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE, 0L)
+        if (ignoredBeforeVersion <= 0L) {
+            return false
+        }
+        if (release.versionKey <= 0L) {
+            return false
+        }
+        return release.versionKey <= ignoredBeforeVersion
+    }
+
+    fun checkForUpdate(manual: Boolean) {
+        if (isCheckingUpdate || isInstallingUpdate) {
+            return
+        }
+        isCheckingUpdate = true
+        if (manual) {
+            updateStatusMessage = t("正在检查更新...", "Checking for updates...")
+        }
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val release = fetchLatestReleaseInfo(releaseHttpClient)
+                val localVersionName = currentAppVersionName(context.applicationContext)
+                val hasNewer = hasNewerRelease(localVersionName, release.tagName)
+                if (!hasNewer) {
+                    withContext(Dispatchers.Main) {
+                        if (manual) {
+                            updateStatusMessage = t(
+                                "当前已是最新版本（$localVersionName）",
+                                "You are up to date ($localVersionName)"
+                            )
+                        }
+                        isCheckingUpdate = false
+                    }
+                    return@launch
+                }
+                clearReleaseIgnoreIfNeeded(release)
+                if (shouldSkipPromptByUserChoice(release)) {
+                    withContext(Dispatchers.Main) {
+                        if (manual) {
+                            updateStatusMessage = t(
+                                "该版本已被设置为“下个新版本再提醒”",
+                                "This version is snoozed until a newer release"
+                            )
+                        }
+                        isCheckingUpdate = false
+                    }
+                    return@launch
+                }
+                preferences.putLong(KEY_UPDATE_LAST_PROMPTED_VERSION_CODE, release.versionKey)
+                preferences.flush()
+                withContext(Dispatchers.Main) {
+                    pendingUpdateInfo = release
+                    showUpdateDialog = true
+                    updateStatusMessage = t(
+                        "发现新版本 ${release.tagName}",
+                        "New version available: ${release.tagName}"
+                    )
+                    isCheckingUpdate = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (manual) {
+                        updateStatusMessage = t(
+                            "检查更新失败: ${e.message ?: "未知错误"}",
+                            "Update check failed: ${e.message ?: "unknown error"}"
+                        )
+                    }
+                    appendLog("检查更新失败: ${e.message ?: e.javaClass.simpleName}")
+                    isCheckingUpdate = false
+                }
+            }
+        }
+    }
+
+    fun installReleaseUpdate(release: UpdateReleaseInfo) {
+        val asset = release.apkAsset
+        if (asset == null) {
+            updateStatusMessage = t(
+                "该版本未提供 APK 资源，请到 Release 页面手动下载。",
+                "No APK asset in this release. Please download manually from Releases page."
+            )
+            return
+        }
+        if (isInstallingUpdate) {
+            return
+        }
+        isInstallingUpdate = true
+        showUpdateDialog = false
+        updateStatusMessage = t("正在下载更新包...", "Downloading update package...")
+        coroutineScope.launch(Dispatchers.IO) {
+            val appContext = context.applicationContext
+            try {
+                cleanupPendingInstallerPackage(appContext, preferences) { appendLog(it) }
+                val apkFile = downloadReleaseApk(releaseHttpClient, appContext, release.tagName, asset)
+                preferences.putString(KEY_PENDING_UPDATE_APK_PATH, apkFile.absolutePath)
+                preferences.flush()
+                withContext(Dispatchers.Main) {
+                    updateStatusMessage = t("下载完成，正在打开安装器...", "Download complete, opening installer...")
+                    try {
+                        startApkInstallIntent(appContext, apkFile)
+                    } catch (e: Exception) {
+                        updateStatusMessage = t(
+                            "无法打开安装器: ${e.message ?: "未知错误"}",
+                            "Failed to open installer: ${e.message ?: "unknown error"}"
+                        )
+                    }
+                }
+                delay(90_000)
+                val deleted = safeDeleteDownloadedApk(appContext, apkFile.absolutePath)
+                if (deleted) {
+                    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
+                    preferences.flush()
+                    withContext(Dispatchers.Main) {
+                        updateStatusMessage = t(
+                            "安装包已自动清理。若安装成功，请重启应用确认版本。",
+                            "Installer package cleaned up. Restart app to verify version after install."
+                        )
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        updateStatusMessage = t(
+                            "安装包仍在使用中，稍后会自动重试清理。",
+                            "Installer package still in use, cleanup will retry later."
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                val pendingPath = preferences.getString(KEY_PENDING_UPDATE_APK_PATH, "").orEmpty().trim()
+                if (pendingPath.isNotBlank()) {
+                    safeDeleteDownloadedApk(appContext, pendingPath)
+                    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
+                    preferences.flush()
+                }
+                withContext(Dispatchers.Main) {
+                    updateStatusMessage = t(
+                        "更新失败: ${e.message ?: "未知错误"}",
+                        "Update failed: ${e.message ?: "unknown error"}"
+                    )
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isInstallingUpdate = false
+                }
+            }
         }
     }
 
@@ -1149,6 +1557,7 @@ fun AppNavigation(
                     apiToken = startSettings.apiToken,
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
+                    languageCode = if (resolveEffectiveLanguage(startSettings.appLanguage) == AppLanguage.ZH_CN) "zh-CN" else "en-US",
                     onLog = { appendLog(it) }
                 )
                 if (answer.isBlank()) {
@@ -1192,6 +1601,7 @@ fun AppNavigation(
                     apiToken = startSettings.apiToken,
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
+                    languageCode = if (resolveEffectiveLanguage(startSettings.appLanguage) == AppLanguage.ZH_CN) "zh-CN" else "en-US",
                     onLog = { appendLog(it) }
                 )
                 if (answer.isBlank()) {
@@ -1284,6 +1694,7 @@ fun AppNavigation(
                     localAsrEnabled = useLocalAsr,
                     speechApiKey = startSettings.speechApiKey,
                     localModelId = resolvedAsrModelId,
+                    cloudWhisperLanguage = if (resolveEffectiveLanguage(startSettings.appLanguage) == AppLanguage.ZH_CN) "zh" else "en",
                     enableVadGate = startSettings.vadEnabled,
                     onLog = { appendLog(it) }
                 )
@@ -1558,10 +1969,12 @@ fun AppNavigation(
             settings = withContext(Dispatchers.IO) {
                 loadSettings(preferences, storageInstance)
             }
+            settingsLoaded = true
         } catch (e: Exception) {
             settings = withContext(Dispatchers.IO) {
                 loadSettings(preferences, null)
             }
+            settingsLoaded = true
             appendLog("安全存储初始化失败，将继续使用非敏感设置: ${e.message ?: "未知错误"}")
         }
     }
@@ -1643,6 +2056,90 @@ fun AppNavigation(
         }
     }
 
+    LaunchedEffect(settingsLoaded, hasAutoCheckedUpdate) {
+        if (!settingsLoaded || hasAutoCheckedUpdate) {
+            return@LaunchedEffect
+        }
+        hasAutoCheckedUpdate = true
+        cleanupPendingInstallerPackage(context.applicationContext, preferences) { appendLog(it) }
+        checkForUpdate(manual = false)
+    }
+
+    if (showUpdateDialog && pendingUpdateInfo != null) {
+        val release = pendingUpdateInfo!!
+        AlertDialog(
+            onDismissRequest = {
+                showUpdateDialog = false
+            },
+            title = {
+                Text(
+                    t(
+                        "发现新版本 ${release.tagName}",
+                        "New version ${release.tagName} available"
+                    )
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        t(
+                            "当前版本：${currentAppVersionName(context.applicationContext)}",
+                            "Current version: ${currentAppVersionName(context.applicationContext)}"
+                        )
+                    )
+                    Text(
+                        t(
+                            "新版本：${release.title}",
+                            "Latest release: ${release.title}"
+                        )
+                    )
+                    Text(
+                        t(
+                            "说明：${release.notes.takeIf { it.isNotBlank() }?.take(240) ?: "暂无发布说明"}",
+                            "Notes: ${release.notes.takeIf { it.isNotBlank() }?.take(240) ?: "No notes"}"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isInstallingUpdate,
+                    onClick = {
+                        installReleaseUpdate(release)
+                    }
+                ) {
+                    Text(t("立即更新", "Update now"))
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showUpdateDialog = false
+                            markReleaseIgnored(release)
+                            updateStatusMessage = t(
+                                "已设置“下个新版本再提醒”",
+                                "You will be reminded when a newer release appears"
+                            )
+                        }
+                    ) {
+                        Text(t("下个新版本再提醒", "Remind me next version"))
+                    }
+                    TextButton(
+                        onClick = {
+                            showUpdateDialog = false
+                            updateStatusMessage = t("已取消本次更新", "Update dismissed")
+                        }
+                    ) {
+                        Text(t("稍后", "Later"))
+                    }
+                }
+            }
+        )
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             wakeWordEngine.stop()
@@ -1715,6 +2212,12 @@ fun AppNavigation(
                     } else if (wasListening) {
                         appendLog("设置保存后参数未变化，继续保持当前监听")
                     }
+                    val languageSavedMessage = when (normalizedSettings.appLanguage) {
+                        AppLanguage.AUTO -> t("语言已设置为跟随系统", "Language set to follow system")
+                        AppLanguage.ZH_CN -> t("语言已设置为中文", "Language set to Chinese")
+                        AppLanguage.EN_US -> t("语言已设置为英文", "Language set to English")
+                    }
+                    updateStatusMessage = languageSavedMessage
                     logVersion += 1
                     navController.popBackStack()
                 },
@@ -1736,7 +2239,9 @@ fun AppNavigation(
                 asrModelFailureMap = asrModelFailureMap,
                 isAsrDownloading = isDownloadingAsr,
                 onDownloadAsrModel = { modelId -> downloadAsrModel(modelId) },
-                onRefreshAsrModelStatus = { refreshAsrModelStatus() }
+                onRefreshAsrModelStatus = { refreshAsrModelStatus() },
+                onCheckUpdate = { checkForUpdate(manual = true) },
+                updateStatusMessage = updateStatusMessage
             )
         }
     }

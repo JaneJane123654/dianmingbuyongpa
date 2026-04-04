@@ -19,6 +19,7 @@ import com.classroomassistant.android.model.LocalKwsModelManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 /**
  * Android 设置页面
@@ -50,7 +51,9 @@ fun SettingsScreen(
     asrModelFailureMap: Map<String, String>,
     isAsrDownloading: Boolean,
     onDownloadAsrModel: (String) -> Unit,
-    onRefreshAsrModelStatus: () -> Unit
+    onRefreshAsrModelStatus: () -> Unit,
+    onCheckUpdate: () -> Unit,
+    updateStatusMessage: String
 ) {
     var keywords by remember { mutableStateOf(initialSettings.keywords) }
     var kwsThreshold by remember { mutableStateOf(initialSettings.kwsThreshold) }
@@ -84,6 +87,8 @@ fun SettingsScreen(
     var infoDialogAsrModel by remember { mutableStateOf<LocalAsrModelManager.AsrModelOption?>(null) }
     var showAsrModelCatalogDialog by remember { mutableStateOf(false) }
     var showAiUsageDialog by remember { mutableStateOf(false) }
+    var showSettingsGuideDialog by remember { mutableStateOf(false) }
+    var appLanguageSelection by remember { mutableStateOf(initialSettings.appLanguage) }
     val providerOptions = remember {
         listOf(
             "OPENAI",
@@ -189,6 +194,27 @@ fun SettingsScreen(
     val dynamicModelSuggestions = remember(aiProvider, aiBaseUrl, apiToken) {
         mutableStateListOf<String>()
     }
+    val effectiveLanguage = remember(appLanguageSelection) {
+        resolveEffectiveLanguage(appLanguageSelection)
+    }
+    fun t(zhText: String, enText: String): String = tr(effectiveLanguage, zhText, enText)
+    fun providerLabel(provider: String): String {
+        return when (provider) {
+            "OPENAI" -> t("OpenAI 官方", "OpenAI Official")
+            "OPENAI_COMPATIBLE" -> t("OpenAI 兼容 / 中转站", "OpenAI Compatible / Gateway")
+            "QIANFAN" -> t("百度千帆", "Baidu Qianfan")
+            "DASHSCOPE" -> t("阿里百炼 (DashScope)", "Alibaba DashScope")
+            "HUNYUAN" -> t("腾讯混元", "Tencent Hunyuan")
+            "ZHIPU" -> t("智谱 AI", "Zhipu AI")
+            "SILICONFLOW" -> t("硅基流动", "SiliconFlow")
+            "BAICHUAN" -> t("百川智能", "Baichuan")
+            "YI" -> t("零一万物 Yi", "Yi")
+            "STEPFUN" -> t("阶跃星辰 StepFun", "StepFun")
+            "OLLAMA" -> t("Ollama（本地）", "Ollama (Local)")
+            "LMSTUDIO" -> t("LM Studio（本地）", "LM Studio (Local)")
+            else -> providerDisplayNames[provider] ?: provider
+        }
+    }
     var isFetchingModels by remember { mutableStateOf(false) }
     var modelFetchMessage by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
@@ -234,6 +260,7 @@ fun SettingsScreen(
         showHeartbeatLogs = initialSettings.showHeartbeatLogs
         ttsSelfTestEnabled = initialSettings.ttsSelfTestEnabled
         backgroundKeepAliveEnabled = initialSettings.backgroundKeepAliveEnabled
+        appLanguageSelection = initialSettings.appLanguage
     }
 
     if (infoDialogModel != null) {
@@ -419,7 +446,7 @@ fun SettingsScreen(
     if (showAiUsageDialog) {
         AlertDialog(
             onDismissRequest = { showAiUsageDialog = false },
-            title = { Text("AI 问答使用说明") },
+            title = { Text(t("AI 问答使用说明", "AI Usage Guide")) },
             text = {
                 Column(
                     modifier = Modifier
@@ -429,31 +456,52 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "1. 先在“模型平台”里选择你要使用的平台（如 OpenAI、DeepSeek、硅基流动等）。",
+                        text = t(
+                            "1. 先在“模型平台”里选择你要使用的平台（如 OpenAI、DeepSeek、硅基流动等）。",
+                            "1. Choose your provider first (for example OpenAI, DeepSeek, or others)."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "2. 打开对应平台官网创建 API Token / Key。平台通常在控制台或 API 管理页提供创建入口。",
+                        text = t(
+                            "2. 打开对应平台官网创建 API Token / Key。平台通常在控制台或 API 管理页提供创建入口。",
+                            "2. Create an API Token/Key on the provider console or API page."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "3. 将 Token 填入“API Token / Key”；若你使用百度千帆，还需要填写“API Secret”。",
+                        text = t(
+                            "3. 将 Token 填入“API Token / Key”；若你使用百度千帆，还需要填写“API Secret”。",
+                            "3. Fill in API Token/Key. For Qianfan, also fill API Secret."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "4. Base URL 一般保持默认；若使用中转站或私有网关，再填写对方提供的 Base URL。",
+                        text = t(
+                            "4. Base URL 一般保持默认；若使用中转站或私有网关，再填写对方提供的 Base URL。",
+                            "4. Keep Base URL default unless your gateway provider gives a custom URL."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "5. 点击“拉取模型”，再在“模型名称”下拉列表中选择可用模型。",
+                        text = t(
+                            "5. 点击“拉取模型”，再在“模型名称”下拉列表中选择可用模型。",
+                            "5. Tap Fetch Models, then choose or type a model name quickly."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "6. 保存设置后，主界面“AI 直接问答”即可手动提问；唤醒后的识别文本也会自动触发 AI 回答。",
+                        text = t(
+                            "6. 保存设置后，主界面“AI 直接问答”即可手动提问；唤醒后的识别文本也会自动触发 AI 回答。",
+                            "6. After saving, ask in Direct AI Q&A. Wake recognition also triggers AI reply automatically."
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "提示：本说明可在“AI 问答”标题右侧 i 图标随时查看。",
+                        text = t(
+                            "提示：本说明可在“AI 问答”标题右侧 i 图标随时查看。",
+                            "Tip: Open this guide any time from the info icon in AI settings."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -461,7 +509,92 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showAiUsageDialog = false }) {
-                    Text("知道了")
+                    Text(t("知道了", "Got it"))
+                }
+            }
+        )
+    }
+
+    if (showSettingsGuideDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsGuideDialog = false },
+            title = { Text(t("设置项使用说明", "Settings Usage Guide")) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = t(
+                            "唤醒词：用于触发监听流程。课堂点名、提问前缀等场景建议设置多个词。",
+                            "Wake words: trigger listening flow. Add multiple names for roll-call and Q&A cues."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "安静检测（VAD）：用于长时间安静时提醒并自动扩大回溯，适合怕漏听场景。",
+                            "Silence detection (VAD): reminds on long silence and can auto-extend lookback."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "语音回溯：控制每次识别回看多少秒音频，课堂节奏快建议保持 20 秒以上。",
+                            "Audio lookback: controls seconds of pre-wake audio for ASR, 20s+ is usually safer."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "语音识别路线：本机 ASR 更稳定、离线友好；云端 Whisper 识别质量更高但依赖网络。",
+                            "ASR route: local ASR is offline-friendly; cloud Whisper may be better quality with network."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "AI 问答：用于识别后自动生成回答建议。先配置平台、密钥、模型，再保存生效。",
+                            "AI Q&A: generates suggested answers after recognition. Configure provider/token/model then save."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "模型管理：当前模型用于实时监听；勾选列表用于提前下载缓存。",
+                            "Model management: current model is used for live listening; checks are for batch downloading."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "开发者选项：默认简洁日志即可；出现问题再开启全面日志并按分类排查。",
+                            "Developer options: keep simple logs by default; switch to full logs only for troubleshooting."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "录音保存：用于课后复盘，建议结合保留天数控制存储占用。",
+                            "Recording retention: useful for post-class review, tune retention days for storage control."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "语言与更新：语言默认跟随系统；也可手动切换。更新支持自动检查和手动检查。",
+                            "Language & update: language follows system by default and can be set manually."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettingsGuideDialog = false }) {
+                    Text(t("知道了", "Got it"))
                 }
             }
         )
@@ -470,10 +603,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text(t("设置", "Settings")) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = t("返回", "Back"))
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -519,7 +652,10 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "唤醒词触发值：${String.format("%.2f", kwsThreshold)}（推荐 0.05）",
+                        text = t(
+                            "唤醒词触发值：${String.format("%.2f", kwsThreshold)}（默认 0.05）",
+                            "Wake threshold: ${String.format(Locale.ROOT, "%.2f", kwsThreshold)} (default 0.05)"
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
@@ -529,7 +665,10 @@ fun SettingsScreen(
                         steps = 14
                     )
                     Text(
-                        text = "说明：值越低越灵敏、越高越稳健；推荐先用 0.05，再按环境微调。",
+                        text = t(
+                            "说明：值越低越灵敏、越高越稳健；默认值为 0.05，可按环境微调。",
+                            "Tip: lower is more sensitive, higher is steadier. Start from default 0.05 and tune."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -561,7 +700,10 @@ fun SettingsScreen(
                     if (vadEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "阈值：${quietThreshold} 秒（推荐 5 秒）",
+                            text = t(
+                                "阈值：${quietThreshold} 秒（默认 5 秒）",
+                                "Threshold: ${quietThreshold}s (default 5s)"
+                            ),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Slider(
@@ -616,7 +758,10 @@ fun SettingsScreen(
                         if (quietAutoLookbackEnabled) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "额外回溯：${quietAutoLookbackExtraSeconds} 秒（推荐 20 秒）",
+                                text = t(
+                                    "额外回溯：${quietAutoLookbackExtraSeconds} 秒（默认 20 秒）",
+                                    "Extra lookback: ${quietAutoLookbackExtraSeconds}s (default 20s)"
+                                ),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Slider(
@@ -652,7 +797,10 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "回溯秒数：${lookbackSeconds} 秒（推荐 20 秒）",
+                        text = t(
+                            "回溯秒数：${lookbackSeconds} 秒（默认 20 秒）",
+                            "Lookback seconds: ${lookbackSeconds}s (default 20s)"
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Slider(
@@ -731,7 +879,10 @@ fun SettingsScreen(
                     if (localAsrEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "本机模型（默认推荐中文增强模型）",
+                            text = t(
+                                "本机模型（默认中文增强模型）",
+                                "Local model (default: Chinese-enhanced model)"
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -944,7 +1095,7 @@ fun SettingsScreen(
                         onExpandedChange = { providerExpanded = !providerExpanded }
                     ) {
                         OutlinedTextField(
-                            value = providerDisplayNames[aiProvider] ?: aiProvider,
+                            value = providerLabel(aiProvider),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("模型平台") },
@@ -959,7 +1110,7 @@ fun SettingsScreen(
                         ) {
                             providerOptions.forEach { provider ->
                                 DropdownMenuItem(
-                                    text = { Text(providerDisplayNames[provider] ?: provider) },
+                                    text = { Text(providerLabel(provider)) },
                                     onClick = {
                                         aiProvider = provider
                                         applyProviderDefaultBaseUrlIfEmpty(provider)
@@ -1038,45 +1189,59 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     if (mergedModelSuggestions.isEmpty()) {
-                        OutlinedTextField(
-                            value = "暂无可选模型，请先填写 Token 后点击“拉取模型”",
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = false,
-                            label = { Text("模型名称") },
-                            modifier = Modifier.fillMaxWidth()
+                        Text(
+                            text = t(
+                                "暂无可选模型：可直接手动输入模型名称，或先填写 Token 后点击“拉取模型”。",
+                                "No model list yet. You can type model name directly, or fetch after filling token."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        var modelExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = modelExpanded,
-                            onExpandedChange = { modelExpanded = !modelExpanded }
+                    }
+                    var modelExpanded by remember { mutableStateOf(false) }
+                    val filteredModelSuggestions = remember(modelName, mergedModelSuggestions) {
+                        val query = modelName.trim().lowercase(Locale.ROOT)
+                        if (query.isBlank()) {
+                            mergedModelSuggestions
+                        } else {
+                            mergedModelSuggestions.filter { it.lowercase(Locale.ROOT).contains(query) }
+                        }
+                    }
+                    ExposedDropdownMenuBox(
+                        expanded = modelExpanded && filteredModelSuggestions.isNotEmpty(),
+                        onExpandedChange = {
+                            modelExpanded = !modelExpanded
+                        }
+                    ) {
+                        OutlinedTextField(
+                            value = modelName,
+                            onValueChange = {
+                                modelName = it
+                                modelExpanded = true
+                            },
+                            label = { Text(t("模型名称", "Model name")) },
+                            placeholder = { Text(t("可输入或下拉选择", "Type or choose from dropdown")) },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = modelExpanded && filteredModelSuggestions.isNotEmpty()
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelExpanded && filteredModelSuggestions.isNotEmpty(),
+                            onDismissRequest = { modelExpanded = false }
                         ) {
-                            OutlinedTextField(
-                                value = modelName,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("模型名称") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = modelExpanded,
-                                onDismissRequest = { modelExpanded = false }
-                            ) {
-                                mergedModelSuggestions.forEach { suggestion ->
-                                    DropdownMenuItem(
-                                        text = { Text(suggestion) },
-                                        onClick = {
-                                            modelName = suggestion
-                                            modelExpanded = false
-                                        }
-                                    )
-                                }
+                            filteredModelSuggestions.forEach { suggestion ->
+                                DropdownMenuItem(
+                                    text = { Text(suggestion) },
+                                    onClick = {
+                                        modelName = suggestion
+                                        modelExpanded = false
+                                    }
+                                )
                             }
                         }
                     }
@@ -1365,7 +1530,10 @@ fun SettingsScreen(
                     if (recordingSaveEnabled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "保留天数：${retentionDays} 天（推荐 7 天）",
+                            text = t(
+                                "保留天数：${retentionDays} 天（默认 7 天）",
+                                "Retention: ${retentionDays} days (default 7)"
+                            ),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Slider(
@@ -1376,6 +1544,116 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "保留时间越长，占用存储越多；建议按课堂复盘周期设置。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = t("使用说明", "Usage Guide"),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = t(
+                            "汇总说明各配置项的作用和适用场景，首次使用建议先阅读。",
+                            "Read this first for what each setting does and when to use it."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showSettingsGuideDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(t("查看设置说明", "Open settings guide"))
+                    }
+                }
+            }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = t("语言与更新", "Language & Update"),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = t(
+                            "语言默认跟随系统，可手动切换。应用每次启动会自动检查更新。",
+                            "Language follows system by default and can be changed manually."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    var languageExpanded by remember { mutableStateOf(false) }
+                    val languageOptions = listOf(AppLanguage.AUTO, AppLanguage.ZH_CN, AppLanguage.EN_US)
+                    val languageLabel = when (appLanguageSelection) {
+                        AppLanguage.AUTO -> t("跟随系统", "Follow system")
+                        AppLanguage.ZH_CN -> "中文"
+                        AppLanguage.EN_US -> "English"
+                    }
+                    ExposedDropdownMenuBox(
+                        expanded = languageExpanded,
+                        onExpandedChange = { languageExpanded = !languageExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = languageLabel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(t("界面语言", "App language")) },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = languageExpanded,
+                            onDismissRequest = { languageExpanded = false }
+                        ) {
+                            languageOptions.forEach { option ->
+                                val optionLabel = when (option) {
+                                    AppLanguage.AUTO -> t("跟随系统", "Follow system")
+                                    AppLanguage.ZH_CN -> "中文"
+                                    AppLanguage.EN_US -> "English"
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(optionLabel) },
+                                    onClick = {
+                                        appLanguageSelection = option
+                                        languageExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { onCheckUpdate() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    ) {
+                        Text(t("检查更新", "Check for updates"))
+                    }
+                    if (updateStatusMessage.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = updateStatusMessage,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1419,7 +1697,8 @@ fun SettingsScreen(
                             showTtsSelfTestLogs = showTtsSelfTestLogs,
                             showHeartbeatLogs = showHeartbeatLogs,
                             ttsSelfTestEnabled = ttsSelfTestEnabled,
-                            backgroundKeepAliveEnabled = backgroundKeepAliveEnabled
+                            backgroundKeepAliveEnabled = backgroundKeepAliveEnabled,
+                            appLanguage = appLanguageSelection
                         )
                     )
                 },
@@ -1427,7 +1706,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                Text("保存设置", style = MaterialTheme.typography.titleMedium)
+                Text(t("保存设置", "Save settings"), style = MaterialTheme.typography.titleMedium)
             }
             }
         }
@@ -1465,5 +1744,6 @@ data class SettingsData(
     val showTtsSelfTestLogs: Boolean,
     val showHeartbeatLogs: Boolean,
     val ttsSelfTestEnabled: Boolean,
-    val backgroundKeepAliveEnabled: Boolean
+    val backgroundKeepAliveEnabled: Boolean,
+    val appLanguage: AppLanguage
 )
