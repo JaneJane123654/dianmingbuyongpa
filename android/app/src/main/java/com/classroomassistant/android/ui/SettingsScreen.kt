@@ -52,6 +52,8 @@ fun SettingsScreen(
     isAsrDownloading: Boolean,
     onDownloadAsrModel: (String) -> Unit,
     onRefreshAsrModelStatus: () -> Unit,
+    onDownloadCustomKwsModel: (String) -> Unit,
+    onDownloadCustomAsrModel: (String) -> Unit,
     onCheckUpdate: () -> Unit,
     updateStatusMessage: String
 ) {
@@ -74,6 +76,7 @@ fun SettingsScreen(
     var localAsrEnabled by remember { mutableStateOf(initialSettings.localAsrEnabled) }
     var localAsrModelId by remember { mutableStateOf(initialSettings.localAsrModelId.ifBlank { asrCurrentModelId }) }
     var cloudWhisperEnabled by remember { mutableStateOf(initialSettings.cloudWhisperEnabled) }
+    var aiSystemPrompt by remember { mutableStateOf(initialSettings.aiSystemPrompt) }
     var wakeAlertMode by remember { mutableStateOf(initialSettings.wakeAlertMode) }
     var logMode by remember { mutableStateOf(initialSettings.logMode) }
     var showDiagnosticLogs by remember { mutableStateOf(initialSettings.showDiagnosticLogs) }
@@ -83,12 +86,17 @@ fun SettingsScreen(
     var showHeartbeatLogs by remember { mutableStateOf(initialSettings.showHeartbeatLogs) }
     var ttsSelfTestEnabled by remember { mutableStateOf(initialSettings.ttsSelfTestEnabled) }
     var backgroundKeepAliveEnabled by remember { mutableStateOf(initialSettings.backgroundKeepAliveEnabled) }
+    var customModelEnabled by remember { mutableStateOf(initialSettings.customModelEnabled) }
+    var customKwsModelUrl by remember { mutableStateOf(initialSettings.customKwsModelUrl) }
+    var customAsrModelUrl by remember { mutableStateOf(initialSettings.customAsrModelUrl) }
     var infoDialogModel by remember { mutableStateOf<LocalKwsModelManager.KwsModelOption?>(null) }
     var infoDialogAsrModel by remember { mutableStateOf<LocalAsrModelManager.AsrModelOption?>(null) }
     var showAsrModelCatalogDialog by remember { mutableStateOf(false) }
     var showAiUsageDialog by remember { mutableStateOf(false) }
     var showSettingsGuideDialog by remember { mutableStateOf(false) }
     var appLanguageSelection by remember { mutableStateOf(initialSettings.appLanguage) }
+    val customKwsModelId = remember { LocalKwsModelManager.CUSTOM_MODEL_ID }
+    val customAsrModelId = remember { LocalAsrModelManager.CUSTOM_MODEL_ID }
     val providerOptions = remember {
         listOf(
             "OPENAI",
@@ -251,6 +259,7 @@ fun SettingsScreen(
         localAsrEnabled = initialSettings.localAsrEnabled
         localAsrModelId = initialSettings.localAsrModelId.ifBlank { asrCurrentModelId }
         cloudWhisperEnabled = initialSettings.cloudWhisperEnabled
+        aiSystemPrompt = initialSettings.aiSystemPrompt
         wakeAlertMode = initialSettings.wakeAlertMode
         logMode = initialSettings.logMode
         showDiagnosticLogs = initialSettings.showDiagnosticLogs
@@ -260,7 +269,37 @@ fun SettingsScreen(
         showHeartbeatLogs = initialSettings.showHeartbeatLogs
         ttsSelfTestEnabled = initialSettings.ttsSelfTestEnabled
         backgroundKeepAliveEnabled = initialSettings.backgroundKeepAliveEnabled
+        customModelEnabled = initialSettings.customModelEnabled
+        customKwsModelUrl = initialSettings.customKwsModelUrl
+        customAsrModelUrl = initialSettings.customAsrModelUrl
         appLanguageSelection = initialSettings.appLanguage
+    }
+
+    val visibleModelOptions = remember(modelOptions, customModelEnabled) {
+        if (customModelEnabled) {
+            modelOptions
+        } else {
+            modelOptions.filter { it.id != customKwsModelId }
+        }
+    }
+    val visibleAsrModelOptions = remember(asrModelOptions, customModelEnabled) {
+        if (customModelEnabled) {
+            asrModelOptions
+        } else {
+            asrModelOptions.filter { it.id != customAsrModelId }
+        }
+    }
+
+    LaunchedEffect(customModelEnabled, localAsrModelId, visibleAsrModelOptions) {
+        if (!customModelEnabled && localAsrModelId == customAsrModelId) {
+            localAsrModelId = visibleAsrModelOptions.firstOrNull()?.id ?: ""
+        }
+    }
+
+    LaunchedEffect(customModelEnabled, currentModelId, visibleModelOptions) {
+        if (!customModelEnabled && currentModelId == customKwsModelId) {
+            visibleModelOptions.firstOrNull()?.let { onCurrentModelChange(it.id) }
+        }
     }
 
     if (infoDialogModel != null) {
@@ -311,7 +350,7 @@ fun SettingsScreen(
 
     LaunchedEffect(aiProvider) {
         val suggestions = modelSuggestionsByProvider[aiProvider].orEmpty()
-        if (suggestions.isNotEmpty() && !suggestions.contains(modelName)) {
+        if (modelName.isBlank() && suggestions.isNotEmpty()) {
             modelName = suggestions.first()
         }
     }
@@ -396,7 +435,7 @@ fun SettingsScreen(
             suggestions.clear()
             suggestions.addAll(fetched)
             if (fetched.isNotEmpty()) {
-                if (modelName.isBlank() || !fetched.contains(modelName)) {
+                if (modelName.isBlank()) {
                     modelName = fetched.first()
                 }
                 modelFetchMessage = "已拉取模型 ${fetched.size} 个"
@@ -420,7 +459,7 @@ fun SettingsScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    asrModelOptions.forEach { option ->
+                    visibleAsrModelOptions.forEach { option ->
                         Text(
                             text = buildString {
                                 append(option.name)
@@ -499,6 +538,13 @@ fun SettingsScreen(
                     )
                     Text(
                         text = t(
+                            "7. “默认提示词”支持自定义，会直接影响 AI 问答风格；留空则使用内置默认提示词。",
+                            "7. You can edit the default system prompt. It directly affects AI response style; leave empty to use built-in default."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
                             "提示：本说明可在“AI 问答”标题右侧 i 图标随时查看。",
                             "Tip: Open this guide any time from the info icon in AI settings."
                         ),
@@ -566,6 +612,13 @@ fun SettingsScreen(
                         text = t(
                             "模型管理：当前模型用于实时监听；勾选列表用于提前下载缓存。",
                             "Model management: current model is used for live listening; checks are for batch downloading."
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = t(
+                            "自行增加模型：开启后会出现下载链接输入框，可手动填写 KWS/ASR 模型包链接下载自定义模型。",
+                            "Custom model sources: when enabled, download URL boxes appear so you can download custom KWS/ASR model archives manually."
                         ),
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -891,7 +944,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            val selectedAsrModel = asrModelOptions.firstOrNull { it.id == localAsrModelId }
+                            val selectedAsrModel = visibleAsrModelOptions.firstOrNull { it.id == localAsrModelId }
                             IconButton(
                                 onClick = {
                                     if (selectedAsrModel != null) {
@@ -912,7 +965,8 @@ fun SettingsScreen(
                             onExpandedChange = { asrExpanded = !asrExpanded }
                         ) {
                             OutlinedTextField(
-                                value = asrModelOptions.firstOrNull { it.id == localAsrModelId }?.name ?: localAsrModelId,
+                                value = visibleAsrModelOptions.firstOrNull { it.id == localAsrModelId }?.name
+                                    ?: localAsrModelId,
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("本机ASR模型") },
@@ -923,7 +977,7 @@ fun SettingsScreen(
                                 expanded = asrExpanded,
                                 onDismissRequest = { asrExpanded = false }
                             ) {
-                                asrModelOptions.forEach { option ->
+                                visibleAsrModelOptions.forEach { option ->
                                     DropdownMenuItem(
                                         text = { Text(option.name) },
                                         onClick = {
@@ -984,6 +1038,25 @@ fun SettingsScreen(
                             ) {
                                 Text("刷新状态")
                             }
+                        }
+                    }
+
+                    if (customModelEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = customAsrModelUrl,
+                            onValueChange = { customAsrModelUrl = it },
+                            label = { Text(t("自定义 ASR 下载链接", "Custom ASR download URL")) },
+                            placeholder = { Text("https://...") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { onDownloadCustomAsrModel(customAsrModelUrl) },
+                            enabled = !isAsrDownloading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(t("下载自定义语音识别模型", "Download custom ASR model"))
                         }
                     }
 
@@ -1146,6 +1219,22 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = aiSystemPrompt,
+                        onValueChange = { aiSystemPrompt = it },
+                        label = { Text(t("默认提示词（可修改）", "Default system prompt (editable)")) },
+                        placeholder = {
+                            Text(
+                                t(
+                                    "留空则使用内置默认提示词",
+                                    "Leave empty to use built-in default prompt"
+                                )
+                            )
+                        },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1183,7 +1272,7 @@ fun SettingsScreen(
                         (dynamicModelSuggestions + staticList).distinct()
                     }
                     LaunchedEffect(aiProvider, mergedModelSuggestions) {
-                        if (mergedModelSuggestions.isNotEmpty() && !mergedModelSuggestions.contains(modelName)) {
+                        if (mergedModelSuggestions.isNotEmpty() && modelName.isBlank()) {
                             modelName = mergedModelSuggestions.first()
                         }
                     }
@@ -1268,6 +1357,27 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(t("开启自行增加模型", "Enable custom model sources"))
+                        Switch(
+                            checked = customModelEnabled,
+                            onCheckedChange = { customModelEnabled = it },
+                            colors = switchColors
+                        )
+                    }
+                    Text(
+                        text = t(
+                            "开启后可在本地语音识别和唤醒模型中填写下载链接，手动下载自定义模型。",
+                            "When enabled, download URL boxes appear in wake/ASR model sections for manual custom model downloads."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     var expanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
@@ -1275,7 +1385,7 @@ fun SettingsScreen(
                         onExpandedChange = { expanded = !expanded }
                     ) {
                         OutlinedTextField(
-                            value = modelOptions.firstOrNull { it.id == currentModelId }?.name ?: currentModelId,
+                            value = visibleModelOptions.firstOrNull { it.id == currentModelId }?.name ?: currentModelId,
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("当前模型") },
@@ -1288,7 +1398,7 @@ fun SettingsScreen(
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
                         ) {
-                            modelOptions.forEach { option ->
+                            visibleModelOptions.forEach { option ->
                                 DropdownMenuItem(
                                     text = { Text(option.name) },
                                     onClick = {
@@ -1303,7 +1413,7 @@ fun SettingsScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        modelOptions.forEach { option ->
+                        visibleModelOptions.forEach { option ->
                             val checked = selectedModelIds.contains(option.id)
                             val status = modelStatusMap[option.id] ?: "未下载"
                             val progress = modelProgressMap[option.id] ?: 0f
@@ -1357,6 +1467,25 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                         }
+                    }
+                    if (customModelEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = customKwsModelUrl,
+                            onValueChange = { customKwsModelUrl = it },
+                            label = { Text(t("自定义唤醒模型下载链接", "Custom wake model download URL")) },
+                            placeholder = { Text("https://...") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { onDownloadCustomKwsModel(customKwsModelUrl) },
+                            enabled = !isDownloading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(t("下载自定义唤醒模型", "Download custom wake model"))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1683,12 +1812,16 @@ fun SettingsScreen(
                             aiProvider = aiProvider,
                             modelName = modelName,
                             aiBaseUrl = aiBaseUrl,
+                            aiSystemPrompt = aiSystemPrompt,
                             apiToken = apiToken,
                             apiSecretKey = apiSecretKey,
                             speechApiKey = speechApiKey,
                             localAsrEnabled = localAsrEnabled,
                             localAsrModelId = localAsrModelId,
                             cloudWhisperEnabled = cloudWhisperEnabled,
+                            customModelEnabled = customModelEnabled,
+                            customKwsModelUrl = customKwsModelUrl,
+                            customAsrModelUrl = customAsrModelUrl,
                             wakeAlertMode = wakeAlertMode,
                             logMode = logMode,
                             showDiagnosticLogs = showDiagnosticLogs,
@@ -1730,12 +1863,16 @@ data class SettingsData(
     val aiProvider: String,
     val modelName: String,
     val aiBaseUrl: String,
+    val aiSystemPrompt: String,
     val apiToken: String,
     val apiSecretKey: String,
     val speechApiKey: String,
     val localAsrEnabled: Boolean,
     val localAsrModelId: String,
     val cloudWhisperEnabled: Boolean,
+    val customModelEnabled: Boolean,
+    val customKwsModelUrl: String,
+    val customAsrModelUrl: String,
     val wakeAlertMode: String,
     val logMode: String,
     val showDiagnosticLogs: Boolean,

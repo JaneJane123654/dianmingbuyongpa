@@ -32,6 +32,7 @@ class AndroidAiAnswerService(
         apiSecretKey: String,
         prompt: String,
         languageCode: String,
+        customSystemPrompt: String,
         onLog: (String) -> Unit
     ): String {
         if (apiToken.isBlank()) {
@@ -40,7 +41,16 @@ class AndroidAiAnswerService(
         }
         val normalizedProvider = provider.uppercase()
         if (normalizedProvider == "QIANFAN" && apiSecretKey.isBlank()) {
-            return generateAnswerViaHttp(provider, modelName, baseUrl, apiToken, prompt, languageCode, onLog)
+            return generateAnswerViaHttp(
+                provider = provider,
+                modelName = modelName,
+                baseUrl = baseUrl,
+                apiToken = apiToken,
+                prompt = prompt,
+                languageCode = languageCode,
+                customSystemPrompt = customSystemPrompt,
+                onLog = onLog
+            )
         }
         return generateAnswerViaLangChain4j(
             provider = normalizedProvider,
@@ -50,6 +60,7 @@ class AndroidAiAnswerService(
             apiSecretKey = apiSecretKey,
             prompt = prompt,
             languageCode = languageCode,
+            customSystemPrompt = customSystemPrompt,
             onLog = onLog
         )
     }
@@ -62,10 +73,11 @@ class AndroidAiAnswerService(
         apiSecretKey: String,
         prompt: String,
         languageCode: String,
+        customSystemPrompt: String,
         onLog: (String) -> Unit
     ): String {
         val resolvedModelName = resolveModelName(provider, modelName)
-        val promptText = "${resolveSystemPrompt(languageCode)}\n\n$prompt"
+        val promptText = "${resolveSystemPrompt(languageCode, customSystemPrompt)}\n\n$prompt"
         val model = buildLangChain4jModel(provider, resolvedModelName, baseUrl, apiToken, apiSecretKey)
         return try {
             val content = model.generate(promptText).orEmpty().trim()
@@ -113,6 +125,7 @@ class AndroidAiAnswerService(
         apiToken: String,
         prompt: String,
         languageCode: String,
+        customSystemPrompt: String,
         onLog: (String) -> Unit
     ): String {
         val endpoint = resolveEndpoint(provider, baseUrl)
@@ -123,7 +136,7 @@ class AndroidAiAnswerService(
             add("messages", JsonArray().apply {
                 add(JsonObject().apply {
                     addProperty("role", "system")
-                    addProperty("content", resolveSystemPrompt(languageCode))
+                    addProperty("content", resolveSystemPrompt(languageCode, customSystemPrompt))
                 })
                 add(JsonObject().apply {
                     addProperty("role", "user")
@@ -411,6 +424,14 @@ class AndroidAiAnswerService(
     }
 
     private fun resolveSystemPrompt(languageCode: String): String {
+        return resolveSystemPrompt(languageCode, "")
+    }
+
+    private fun resolveSystemPrompt(languageCode: String, customSystemPrompt: String): String {
+        val custom = customSystemPrompt.trim()
+        if (custom.isNotBlank()) {
+            return custom
+        }
         return if (languageCode.lowercase().startsWith("en")) {
             systemPromptEn
         } else {

@@ -19,6 +19,10 @@ class LocalKwsModelManager(
     private val storage: AndroidStorage,
     private val client: OkHttpClient = OkHttpClient()
 ) {
+    companion object {
+        const val CUSTOM_MODEL_ID = "custom-kws-url-model"
+    }
+
     private data class DownloadSource(
         val name: String,
         val baseUrl: String
@@ -60,6 +64,12 @@ class LocalKwsModelManager(
             name = "Zipformer 中英 3M (2025-12-20)",
             description = "中英双语唤醒模型，优先推荐给混合语言场景",
             sizeLabel = "约 3 MB"
+        ),
+        KwsModelOption(
+            id = CUSTOM_MODEL_ID,
+            name = "自定义链接模型 / Custom URL Model",
+            description = "通过设置页填写下载链接后可下载并使用",
+            sizeLabel = "大小取决于下载链接"
         )
     )
 
@@ -87,6 +97,72 @@ class LocalKwsModelManager(
         val tmpArchive = File(archive.absolutePath + ".part")
         try {
             downloadArchiveWithFallback(tmpArchive, modelId, onProgress, onEvent)
+            if (!tmpArchive.renameTo(archive)) {
+                return Result.failure(IOException("模型包移动失败"))
+            }
+            val extractDir = File(storage.getModelsDir(), "kws_extract_${UUID.randomUUID()}")
+            if (!extractDir.exists()) {
+                extractDir.mkdirs()
+            }
+            extractTarBz2(archive, extractDir)
+            val targetDir = getModelDir(modelId)
+            deleteRecursively(targetDir)
+            targetDir.mkdirs()
+            val required = collectRequiredFiles(extractDir)
+            val missing = requiredFiles.filter { required[it] == null }
+            if (missing.isNotEmpty()) {
+                return Result.failure(IOException("模型文件不完整: ${missing.joinToString(", ")}"))
+            }
+            requiredFiles.forEach { name ->
+                val source = required[name] ?: return@forEach
+                copyRecursively(source, File(targetDir, name))
+            }
+            optionalKeywordFiles.forEach { name ->
+                val source = required[name] ?: return@forEach
+                copyRecursively(source, File(targetDir, name))
+            }
+            deleteRecursively(extractDir)
+            if (!isModelReady(modelId)) {
+                val missing = missingFiles(targetDir)
+                return Result.failure(IOException("模型文件不完整: ${missing.joinToString(", ")}"))
+            }
+            return Result.success(targetDir)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        } finally {
+            if (archive.exists()) {
+                archive.delete()
+            }
+            if (tmpArchive.exists()) {
+                tmpArchive.delete()
+            }
+        }
+    }
+
+    fun downloadAndPrepareFromUrl(
+        modelId: String = CUSTOM_MODEL_ID,
+        archiveUrl: String,
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit = {}
+    ): Result<File> {
+        val normalizedUrl = archiveUrl.trim()
+        if (normalizedUrl.isBlank()) {
+            return Result.failure(IllegalArgumentException("请先填写唤醒模型下载链接"))
+        }
+        val isHttp = normalizedUrl.startsWith("https://", ignoreCase = true) ||
+            normalizedUrl.startsWith("http://", ignoreCase = true)
+        if (!isHttp) {
+            return Result.failure(IllegalArgumentException("下载链接必须以 http:// 或 https:// 开头"))
+        }
+        if (!normalizedUrl.lowercase().endsWith(".tar.bz2")) {
+            return Result.failure(IllegalArgumentException("当前仅支持 .tar.bz2 模型包链接"))
+        }
+
+        val archive = File(context.cacheDir, "kws_custom_${UUID.randomUUID()}.tar.bz2")
+        val tmpArchive = File(archive.absolutePath + ".part")
+        try {
+            onEvent("自定义唤醒模型下载: 使用外部链接")
+            downloadArchiveWithRetry(tmpArchive, normalizedUrl, "自定义链接", onProgress, onEvent)
             if (!tmpArchive.renameTo(archive)) {
                 return Result.failure(IOException("模型包移动失败"))
             }

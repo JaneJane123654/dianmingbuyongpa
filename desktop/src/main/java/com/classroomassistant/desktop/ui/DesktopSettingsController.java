@@ -764,8 +764,9 @@ public class DesktopSettingsController {
                     if (seq != modelFetchSequence.get()) {
                         return;
                     }
+                    String currentText = modelNameComboBox.getEditor().getText();
                     modelNameComboBox.setItems(FXCollections.observableArrayList(fetched));
-                    if (!fetched.isEmpty()) {
+                    if ((currentText == null || currentText.isBlank()) && !fetched.isEmpty()) {
                         modelNameComboBox.getEditor().setText(fetched.get(0));
                     }
                     statusLabel.setText("已拉取模型 " + fetched.size() + " 个");

@@ -19,6 +19,10 @@ class LocalAsrModelManager(
     private val storage: AndroidStorage,
     private val client: OkHttpClient = OkHttpClient()
 ) {
+    companion object {
+        const val CUSTOM_MODEL_ID = "custom-asr-url-model"
+    }
+
     private data class DownloadSource(
         val name: String,
         val baseUrl: String
@@ -90,6 +94,12 @@ class LocalAsrModelManager(
             name = "英文增强模型（zipformer）",
             description = "英文识别效果优先，体积更大，建议在较新手机上使用",
             sizeLabel = "约 80~120 MB"
+        ),
+        AsrModelOption(
+            id = CUSTOM_MODEL_ID,
+            name = "自定义链接模型 / Custom URL Model",
+            description = "通过设置页填写下载链接后可下载并使用",
+            sizeLabel = "大小取决于下载链接"
         )
     )
 
@@ -116,6 +126,72 @@ class LocalAsrModelManager(
         val tmpArchive = File(archive.absolutePath + ".part")
         try {
             downloadArchiveWithFallback(tmpArchive, modelId, onProgress, onEvent)
+            if (!tmpArchive.renameTo(archive)) {
+                return Result.failure(IOException("ASR模型包移动失败"))
+            }
+            val extractDir = File(storage.getModelsDir(), "asr_extract_${UUID.randomUUID()}")
+            if (!extractDir.exists()) {
+                extractDir.mkdirs()
+            }
+            extractTarBz2(archive, extractDir)
+            val targetDir = getModelDir(modelId)
+            deleteRecursively(targetDir)
+            targetDir.mkdirs()
+
+            val required = collectRequiredFiles(extractDir)
+            val missing = requiredFiles.filter { required[it] == null }
+            if (missing.isNotEmpty()) {
+                return Result.failure(IOException("ASR模型文件不完整: ${missing.joinToString(", ")}"))
+            }
+
+            requiredFiles.forEach { name ->
+                val source = required[name] ?: return@forEach
+                copyRecursively(source, File(targetDir, name))
+            }
+
+            deleteRecursively(extractDir)
+
+            if (!isModelReady(modelId)) {
+                val missingNow = invalidFiles(targetDir)
+                return Result.failure(IOException("ASR模型文件不完整: ${missingNow.joinToString(", ")}"))
+            }
+            return Result.success(targetDir)
+        } catch (e: Exception) {
+            return Result.failure(e)
+        } finally {
+            if (archive.exists()) {
+                archive.delete()
+            }
+            if (tmpArchive.exists()) {
+                tmpArchive.delete()
+            }
+        }
+    }
+
+    fun downloadAndPrepareFromUrl(
+        modelId: String = CUSTOM_MODEL_ID,
+        archiveUrl: String,
+        onProgress: (Long, Long) -> Unit,
+        onEvent: (String) -> Unit = {}
+    ): Result<File> {
+        val normalizedUrl = archiveUrl.trim()
+        if (normalizedUrl.isBlank()) {
+            return Result.failure(IllegalArgumentException("请先填写语音识别模型下载链接"))
+        }
+        val isHttp = normalizedUrl.startsWith("https://", ignoreCase = true) ||
+            normalizedUrl.startsWith("http://", ignoreCase = true)
+        if (!isHttp) {
+            return Result.failure(IllegalArgumentException("下载链接必须以 http:// 或 https:// 开头"))
+        }
+        if (!normalizedUrl.lowercase().endsWith(".tar.bz2")) {
+            return Result.failure(IllegalArgumentException("当前仅支持 .tar.bz2 模型包链接"))
+        }
+
+        val archive = File(context.cacheDir, "asr_custom_${UUID.randomUUID()}.tar.bz2")
+        val tmpArchive = File(archive.absolutePath + ".part")
+        try {
+            onEvent("自定义ASR模型下载: 使用外部链接")
+            downloadArchiveWithRetry(tmpArchive, normalizedUrl, "自定义链接", onProgress, onEvent)
             if (!tmpArchive.renameTo(archive)) {
                 return Result.failure(IOException("ASR模型包移动失败"))
             }

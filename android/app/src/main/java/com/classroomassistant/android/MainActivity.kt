@@ -83,6 +83,7 @@ private const val KEY_VAD_QUIET_AUTO_LOOKBACK_EXTRA_SECONDS = "vad.quietAutoLook
 private const val KEY_AI_PROVIDER = "ai.provider"
 private const val KEY_AI_MODEL_NAME = "ai.modelName"
 private const val KEY_AI_BASE_URL = "ai.baseUrl"
+private const val KEY_AI_SYSTEM_PROMPT = "ai.systemPrompt"
 private const val KEY_AI_TOKEN = "ai.token.encrypted"
 private const val KEY_AI_SECRET = "ai.secret.encrypted"
 private const val KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled"
@@ -103,6 +104,9 @@ private const val KEY_LOG_SHOW_TTS_SELF_TEST = "developer.log.showTtsSelfTest"
 private const val KEY_LOG_SHOW_HEARTBEAT = "developer.log.showHeartbeat"
 private const val KEY_TTS_SELF_TEST_ENABLED = "developer.tts.selfTest.enabled"
 private const val KEY_BACKGROUND_KEEPALIVE_ENABLED = "listening.backgroundKeepAliveEnabled"
+private const val KEY_CUSTOM_MODEL_ENABLED = "model.custom.enabled"
+private const val KEY_CUSTOM_KWS_MODEL_URL = "model.custom.kws.url"
+private const val KEY_CUSTOM_ASR_MODEL_URL = "model.custom.asr.url"
 private const val KEY_APP_LANGUAGE = "app.language"
 private const val KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE = "app.update.ignoreBeforeVersionCode"
 private const val KEY_UPDATE_LAST_PROMPTED_VERSION_CODE = "app.update.lastPromptedVersionCode"
@@ -506,12 +510,16 @@ private fun defaultSettings(): SettingsData {
         aiProvider = "OPENAI_COMPATIBLE",
         modelName = "",
         aiBaseUrl = "",
+        aiSystemPrompt = "",
         apiToken = "",
         apiSecretKey = "",
         speechApiKey = "",
         localAsrEnabled = true,
         localAsrModelId = "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16",
         cloudWhisperEnabled = false,
+        customModelEnabled = false,
+        customKwsModelUrl = "",
+        customAsrModelUrl = "",
         wakeAlertMode = "NOTIFICATION_ONLY",
         logMode = "SIMPLE",
         showDiagnosticLogs = false,
@@ -628,12 +636,16 @@ private fun loadSettings(
     val aiProvider = if (aiProviders.contains(providerRaw)) providerRaw else "OPENAI_COMPATIBLE"
     val modelName = preferences.getString(KEY_AI_MODEL_NAME, "") ?: ""
     val aiBaseUrl = preferences.getString(KEY_AI_BASE_URL, "") ?: ""
+    val aiSystemPrompt = preferences.getString(KEY_AI_SYSTEM_PROMPT, defaults.aiSystemPrompt) ?: defaults.aiSystemPrompt
     val apiToken = secureStorage?.retrieveSecure(KEY_AI_TOKEN) ?: ""
     val apiSecretKey = secureStorage?.retrieveSecure(KEY_AI_SECRET) ?: ""
     val speechApiKey = secureStorage?.retrieveSecure(KEY_SPEECH_API_KEY) ?: ""
     val localAsrEnabled = preferences.getBoolean(KEY_ASR_LOCAL_ENABLED, defaults.localAsrEnabled)
     val localAsrModelId = preferences.getString(KEY_ASR_LOCAL_MODEL_ID, defaults.localAsrModelId) ?: defaults.localAsrModelId
     val cloudWhisperEnabled = preferences.getBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, defaults.cloudWhisperEnabled)
+    val customModelEnabled = preferences.getBoolean(KEY_CUSTOM_MODEL_ENABLED, defaults.customModelEnabled)
+    val customKwsModelUrl = preferences.getString(KEY_CUSTOM_KWS_MODEL_URL, defaults.customKwsModelUrl) ?: defaults.customKwsModelUrl
+    val customAsrModelUrl = preferences.getString(KEY_CUSTOM_ASR_MODEL_URL, defaults.customAsrModelUrl) ?: defaults.customAsrModelUrl
     val showDiagnosticLogs = preferences.getBoolean(KEY_LOG_SHOW_DIAGNOSTIC, defaults.showDiagnosticLogs)
     val showAudioDeviceLogs = preferences.getBoolean(KEY_LOG_SHOW_AUDIO_DEVICE, defaults.showAudioDeviceLogs)
     val showGainActivityLogs = preferences.getBoolean(KEY_LOG_SHOW_GAIN_ACTIVITY, defaults.showGainActivityLogs)
@@ -656,12 +668,16 @@ private fun loadSettings(
         aiProvider = aiProvider,
         modelName = modelName,
         aiBaseUrl = aiBaseUrl,
+        aiSystemPrompt = aiSystemPrompt,
         apiToken = apiToken,
         apiSecretKey = apiSecretKey,
         speechApiKey = speechApiKey,
         localAsrEnabled = localAsrEnabled,
         localAsrModelId = localAsrModelId,
         cloudWhisperEnabled = cloudWhisperEnabled,
+        customModelEnabled = customModelEnabled,
+        customKwsModelUrl = customKwsModelUrl,
+        customAsrModelUrl = customAsrModelUrl,
         wakeAlertMode = wakeAlertMode,
         logMode = logMode,
         showDiagnosticLogs = showDiagnosticLogs,
@@ -697,9 +713,13 @@ private fun saveSettings(
     preferences.putString(KEY_AI_PROVIDER, settings.aiProvider)
     preferences.putString(KEY_AI_MODEL_NAME, settings.modelName)
     preferences.putString(KEY_AI_BASE_URL, settings.aiBaseUrl.trim())
+    preferences.putString(KEY_AI_SYSTEM_PROMPT, settings.aiSystemPrompt.trim())
     preferences.putBoolean(KEY_ASR_LOCAL_ENABLED, settings.localAsrEnabled)
     preferences.putString(KEY_ASR_LOCAL_MODEL_ID, settings.localAsrModelId)
     preferences.putBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, settings.cloudWhisperEnabled)
+    preferences.putBoolean(KEY_CUSTOM_MODEL_ENABLED, settings.customModelEnabled)
+    preferences.putString(KEY_CUSTOM_KWS_MODEL_URL, settings.customKwsModelUrl.trim())
+    preferences.putString(KEY_CUSTOM_ASR_MODEL_URL, settings.customAsrModelUrl.trim())
     preferences.putString(KEY_WAKE_ALERT_MODE, if (settings.wakeAlertMode == "SOUND") "SOUND" else "NOTIFICATION_ONLY")
     preferences.putString(KEY_LOG_MODE, if (settings.logMode == "FULL") "FULL" else "SIMPLE")
     preferences.putBoolean(KEY_LOG_SHOW_DIAGNOSTIC, settings.showDiagnosticLogs)
@@ -884,10 +904,21 @@ fun AppNavigation(
     val asrService = runtimeDependencies.asrService
     val aiAnswerService = runtimeDependencies.aiAnswerService
     val availableModels = remember { modelManager.getAvailableModels() }
+    val customKwsModelId = remember { LocalKwsModelManager.CUSTOM_MODEL_ID }
+    val customAsrModelId = remember { LocalAsrModelManager.CUSTOM_MODEL_ID }
+    val customModelEnabledAtLaunch = remember {
+        preferences.getBoolean(KEY_CUSTOM_MODEL_ENABLED, false)
+    }
     val defaultModelId = remember { modelManager.getDefaultModelId() }
     val savedModelId = remember { preferences.getString(KEY_KWS_MODEL_ID, defaultModelId) ?: defaultModelId }
     var currentModelId by remember {
-        mutableStateOf(if (availableModels.any { it.id == savedModelId }) savedModelId else defaultModelId)
+        mutableStateOf(
+            when {
+                !customModelEnabledAtLaunch && savedModelId == customKwsModelId -> defaultModelId
+                availableModels.any { it.id == savedModelId } -> savedModelId
+                else -> defaultModelId
+            }
+        )
     }
     val savedSelectedRaw = remember { preferences.getString(KEY_KWS_MODEL_SELECTED, "") ?: "" }
     val savedSelected = remember {
@@ -895,7 +926,10 @@ fun AppNavigation(
     }
     var selectedModelIds by remember {
         mutableStateOf(
-            (savedSelected + currentModelId).filter { id -> availableModels.any { it.id == id } }.toSet()
+            (savedSelected + currentModelId).filter { id ->
+                availableModels.any { it.id == id } &&
+                    (customModelEnabledAtLaunch || id != customKwsModelId)
+            }.toSet()
         )
     }
     var modelStatusMap by remember {
@@ -1246,6 +1280,22 @@ fun AppNavigation(
         currentModelReady = modelManager.isModelReady(currentModelId)
     }
 
+    LaunchedEffect(settings.customModelEnabled, currentModelId) {
+        if (settings.customModelEnabled) {
+            return@LaunchedEffect
+        }
+        if (currentModelId == customKwsModelId) {
+            val fallbackKwsModelId = availableModels.firstOrNull { it.id != customKwsModelId }?.id ?: defaultModelId
+            currentModelId = fallbackKwsModelId
+            preferences.putString(KEY_KWS_MODEL_ID, fallbackKwsModelId)
+            preferences.flush()
+            currentModelReady = modelManager.isModelReady(fallbackKwsModelId)
+            selectedModelIds = selectedModelIds.filter { it != customKwsModelId }.toSet()
+            persistSelectedModels()
+            appendLog("已关闭自行增加模型，自动切换为内置唤醒模型")
+        }
+    }
+
     fun updateCurrentModel(modelId: String) {
         currentModelId = modelId
         preferences.putString(KEY_KWS_MODEL_ID, modelId)
@@ -1317,6 +1367,134 @@ fun AppNavigation(
             availableAsrModels.forEach { option ->
                 if (asrModelManager.isModelReady(option.id)) {
                     put(option.id, 1f)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(settings.customModelEnabled, settings.localAsrModelId) {
+        if (settings.customModelEnabled) {
+            return@LaunchedEffect
+        }
+        if (settings.localAsrModelId == customAsrModelId) {
+            val fallbackAsrModelId = availableAsrModels.firstOrNull { it.id != customAsrModelId }?.id ?: defaultAsrModelId
+            settings = settings.copy(localAsrModelId = fallbackAsrModelId)
+            saveSettings(preferences, secureStorage, settings)
+            appendLog("已关闭自行增加模型，自动切换为内置本机ASR模型")
+        }
+    }
+
+    fun downloadCustomKwsModel(url: String) {
+        if (isDownloading) {
+            appendLog("当前有下载任务，稍后再试")
+            return
+        }
+        val customUrl = url.trim()
+        if (customUrl.isBlank()) {
+            appendLog("请先填写自定义唤醒模型下载链接")
+            return
+        }
+        val customModel = availableModels.firstOrNull { it.id == customKwsModelId }
+        if (customModel == null) {
+            appendLog("未找到自定义唤醒模型入口")
+            return
+        }
+        isDownloading = true
+        selectedModelIds = selectedModelIds + customKwsModelId
+        persistSelectedModels()
+        appendLog("开始下载自定义唤醒模型")
+        coroutineScope.launch(Dispatchers.IO) {
+            mainHandler.post {
+                updateModelStatus(customKwsModelId, "下载中", 0f)
+                modelFailureMap = modelFailureMap.toMutableMap().apply { put(customKwsModelId, "") }
+            }
+            val result = modelManager.downloadAndPrepareFromUrl(
+                modelId = customKwsModelId,
+                archiveUrl = customUrl,
+                onProgress = { downloaded, total ->
+                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                    mainHandler.post {
+                        val status = when {
+                            total > 0 && progress >= 0.999f -> "下载完成，处理中"
+                            total > 0 -> "下载中 ${(progress * 100).toInt()}%"
+                            else -> "下载中"
+                        }
+                        updateModelStatus(customKwsModelId, status, progress)
+                    }
+                },
+                onEvent = { event -> appendLog("模型下载[${customModel.name}]: $event") }
+            )
+            withContext(Dispatchers.Main) {
+                isDownloading = false
+                if (result.isSuccess) {
+                    updateModelStatus(customKwsModelId, "已就绪", 1f)
+                    modelFailureMap = modelFailureMap.toMutableMap().apply { put(customKwsModelId, "") }
+                    currentModelId = customKwsModelId
+                    preferences.putString(KEY_KWS_MODEL_ID, customKwsModelId)
+                    preferences.flush()
+                    currentModelReady = modelManager.isModelReady(customKwsModelId)
+                    appendLog("自定义唤醒模型下载成功，已切换为当前模型")
+                } else {
+                    updateModelStatus(customKwsModelId, "失败", 0f)
+                    val reason = buildFailureReason(result.exceptionOrNull())
+                    modelFailureMap = modelFailureMap.toMutableMap().apply { put(customKwsModelId, reason) }
+                    appendLog("自定义唤醒模型下载失败: $reason")
+                }
+            }
+        }
+    }
+
+    fun downloadCustomAsrModel(url: String) {
+        if (isDownloadingAsr) {
+            appendLog("当前有本机ASR模型下载任务，稍后再试")
+            return
+        }
+        val customUrl = url.trim()
+        if (customUrl.isBlank()) {
+            appendLog("请先填写自定义语音识别模型下载链接")
+            return
+        }
+        val customModel = availableAsrModels.firstOrNull { it.id == customAsrModelId }
+        if (customModel == null) {
+            appendLog("未找到自定义语音识别模型入口")
+            return
+        }
+        isDownloadingAsr = true
+        appendLog("开始下载自定义语音识别模型")
+        coroutineScope.launch(Dispatchers.IO) {
+            mainHandler.post {
+                updateAsrModelStatus(customAsrModelId, "下载中", 0f)
+                asrModelFailureMap = asrModelFailureMap.toMutableMap().apply { put(customAsrModelId, "") }
+            }
+            val result = asrModelManager.downloadAndPrepareFromUrl(
+                modelId = customAsrModelId,
+                archiveUrl = customUrl,
+                onProgress = { downloaded, total ->
+                    val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                    mainHandler.post {
+                        val status = when {
+                            total > 0 && progress >= 0.999f -> "下载完成，处理中"
+                            total > 0 -> "下载中 ${(progress * 100).toInt()}%"
+                            else -> "下载中"
+                        }
+                        updateAsrModelStatus(customAsrModelId, status, progress)
+                    }
+                },
+                onEvent = { event -> appendLog("ASR下载[${customModel.name}]: $event") }
+            )
+            withContext(Dispatchers.Main) {
+                isDownloadingAsr = false
+                if (result.isSuccess) {
+                    updateAsrModelStatus(customAsrModelId, "已就绪", 1f)
+                    asrModelFailureMap = asrModelFailureMap.toMutableMap().apply { put(customAsrModelId, "") }
+                    settings = settings.copy(localAsrModelId = customAsrModelId)
+                    saveSettings(preferences, secureStorage, settings)
+                    appendLog("自定义语音识别模型下载成功，已设为当前本机ASR模型")
+                } else {
+                    updateAsrModelStatus(customAsrModelId, "失败", 0f)
+                    val reason = buildFailureReason(result.exceptionOrNull())
+                    asrModelFailureMap = asrModelFailureMap.toMutableMap().apply { put(customAsrModelId, reason) }
+                    appendLog("自定义语音识别模型下载失败: $reason")
                 }
             }
         }
@@ -1558,6 +1736,7 @@ fun AppNavigation(
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
                     languageCode = if (resolveEffectiveLanguage(startSettings.appLanguage) == AppLanguage.ZH_CN) "zh-CN" else "en-US",
+                    customSystemPrompt = startSettings.aiSystemPrompt,
                     onLog = { appendLog(it) }
                 )
                 if (answer.isBlank()) {
@@ -1602,6 +1781,7 @@ fun AppNavigation(
                     apiSecretKey = startSettings.apiSecretKey,
                     prompt = prompt,
                     languageCode = if (resolveEffectiveLanguage(startSettings.appLanguage) == AppLanguage.ZH_CN) "zh-CN" else "en-US",
+                    customSystemPrompt = startSettings.aiSystemPrompt,
                     onLog = { appendLog(it) }
                 )
                 if (answer.isBlank()) {
@@ -2187,7 +2367,21 @@ fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() },
                 initialSettings = settings,
                 onSave = { updatedSettings ->
-                    val normalizedAsrModelId = updatedSettings.localAsrModelId.ifBlank { defaultAsrModelId }
+                    val normalizedAsrModelId = when {
+                        updatedSettings.localAsrModelId.isBlank() -> defaultAsrModelId
+                        !updatedSettings.customModelEnabled && updatedSettings.localAsrModelId == customAsrModelId ->
+                            availableAsrModels.firstOrNull { it.id != customAsrModelId }?.id ?: defaultAsrModelId
+                        else -> updatedSettings.localAsrModelId
+                    }
+                    if (!updatedSettings.customModelEnabled && currentModelId == customKwsModelId) {
+                        val fallbackKwsModelId = availableModels.firstOrNull { it.id != customKwsModelId }?.id ?: defaultModelId
+                        currentModelId = fallbackKwsModelId
+                        preferences.putString(KEY_KWS_MODEL_ID, fallbackKwsModelId)
+                        preferences.flush()
+                        currentModelReady = modelManager.isModelReady(fallbackKwsModelId)
+                        selectedModelIds = selectedModelIds.filter { it != customKwsModelId }.toSet()
+                        persistSelectedModels()
+                    }
                     val normalizedSettings = updatedSettings.copy(localAsrModelId = normalizedAsrModelId)
                     val wasListening = isMonitoring || isStarting || wakeWordEngine.isRunning()
                     val configChanged = hasMonitoringConfigChanged(
@@ -2240,6 +2434,8 @@ fun AppNavigation(
                 isAsrDownloading = isDownloadingAsr,
                 onDownloadAsrModel = { modelId -> downloadAsrModel(modelId) },
                 onRefreshAsrModelStatus = { refreshAsrModelStatus() },
+                onDownloadCustomKwsModel = { url -> downloadCustomKwsModel(url) },
+                onDownloadCustomAsrModel = { url -> downloadCustomAsrModel(url) },
                 onCheckUpdate = { checkForUpdate(manual = true) },
                 updateStatusMessage = updateStatusMessage
             )
