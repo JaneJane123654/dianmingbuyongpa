@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Priority?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/17"
+    xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.classroomassistant.desktop.ui.MainController">
+
+    <top>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+            <Label text="学生课堂挂机程序 v3.0（桌面）" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label text="快捷键: F5开始  F6停止  F8手动触发  Ctrl+,设置" styleClass="info-label"/>
+            <Label fx:id="engineStatusLabel" text="" styleClass="info-label"/>
+            <Button fx:id="settingsButton" text="设置" styleClass="secondary-button" onAction="#openSettings"/>
+        </HBox>
+    </top>
+
+    <center>
+        <SplitPane dividerPositions="0.66">
+            <items>
+                <VBox spacing="12" prefWidth="780">
+                    <padding>
+                        <Insets top="12" right="12" bottom="12" left="12"/>
+                    </padding>
+
+                    <VBox spacing="8" styleClass="status-panel">
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="监听状态" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Label fx:id="modelStatusLabel" text="" styleClass="info-label"/>
+                        </HBox>
+
+                        <GridPane hgap="10" vgap="8">
+                            <columnConstraints>
+                                <javafx.scene.layout.ColumnConstraints percentWidth="26"/>
+                                <javafx.scene.layout.ColumnConstraints percentWidth="74"/>
+                            </columnConstraints>
+
+                            <Label text="录音状态：" styleClass="info-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <Label fx:id="recordingStatusLabel" text="未录音" styleClass="status-label" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                            <Label text="检测状态：" styleClass="info-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <Label fx:id="detectionStatusLabel" text="未启动" styleClass="status-label" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="安静计时：" styleClass="info-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <Label fx:id="quietSecondsLabel" text="0s" styleClass="status-label" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="录音保存：" styleClass="info-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <Label fx:id="recordingSaveStatusLabel" text="未启用" styleClass="status-label" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+                        </GridPane>
+                    </VBox>
+
+                    <VBox spacing="8" styleClass="answer-panel" VBox.vgrow="ALWAYS">
+                        <Label text="课堂内容（识别）" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <TextArea fx:id="lectureTextArea" editable="false" wrapText="true" prefRowCount="7"/>
+
+                        <Label text="AI 回答" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+                        <TextArea fx:id="answerTextArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS"/>
+                    </VBox>
+                </VBox>
+
+                <VBox spacing="8" prefWidth="420">
+                    <padding>
+                        <Insets top="12" right="12" bottom="12" left="0"/>
+                    </padding>
+                    <VBox spacing="6" styleClass="status-panel" VBox.vgrow="ALWAYS">
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="运行日志" style="-fx-font-size: 13px; -fx-font-weight: bold;"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="clearLogButton" text="清空" styleClass="small-button" onAction="#clearLog"/>
+                        </HBox>
+                        <TextArea fx:id="logTextArea" editable="false" wrapText="true" styleClass="log-text" VBox.vgrow="ALWAYS"/>
+                    </VBox>
+                </VBox>
+            </items>
+        </SplitPane>
+    </center>
+
+    <bottom>
+        <HBox spacing="10">
+            <padding>
+                <Insets top="12" right="12" bottom="12" left="12"/>
+            </padding>
+            <Button fx:id="startButton" text="开始监听" styleClass="primary-button" onAction="#startClass"/>
+            <Button fx:id="stopButton" text="停止监听" styleClass="stop-button" onAction="#stopClass"/>
+            <Button fx:id="triggerNowButton" text="手动触发识别" styleClass="secondary-button" onAction="#triggerRecognitionNow"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="hintLabel" text="就绪" styleClass="info-label"/>
+        </HBox>
+    </bottom>
+</BorderPane>

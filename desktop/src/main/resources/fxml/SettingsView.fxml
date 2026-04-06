@@ -141,9 +141,14 @@
                         <Label text="模型管理" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
                         <Label text="本地唤醒模型下载与选择" styleClass="info-label"/>
                         <ComboBox fx:id="currentModelComboBox" prefWidth="360"/>
-                        <VBox fx:id="modelOptionsBox" spacing="8"/>
-                        <Label text="本地语音识别与静音模型" styleClass="info-label"/>
-                        <VBox fx:id="auxModelOptionsBox" spacing="8"/>
+                        <Label fx:id="kwsModelStatusLabel" text="KWS状态: 未就绪" styleClass="info-label"/>
+                        <TextField fx:id="customKwsModelUrlField" promptText="自定义 KWS 模型 .tar.bz2 链接" visible="false" managed="false"/>
+                        <Label text="本地语音识别模型" styleClass="info-label"/>
+                        <ComboBox fx:id="asrModelComboBox" prefWidth="360"/>
+                        <Label fx:id="asrModelStatusLabel" text="ASR状态: 未就绪" styleClass="info-label"/>
+                        <TextField fx:id="customAsrModelUrlField" promptText="自定义 ASR 模型 .tar.bz2 链接" visible="false" managed="false"/>
+                        <VBox fx:id="modelOptionsBox" spacing="8" managed="false" visible="false"/>
+                        <VBox fx:id="auxModelOptionsBox" spacing="8" managed="false" visible="false"/>
                         <HBox spacing="10" alignment="CENTER_LEFT">
                             <Button fx:id="downloadSelectedButton" text="下载选中模型" styleClass="primary-button" onAction="#downloadSelectedModels" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                             <Button fx:id="refreshModelStatusButton" text="刷新状态" styleClass="secondary-button" onAction="#refreshModelStatus" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>

@@ -3,6 +3,8 @@ package com.classroomassistant.desktop.ui;
 import com.classroomassistant.core.platform.PlatformPreferences;
 import com.classroomassistant.core.platform.PlatformSecureStorage;
 import com.classroomassistant.desktop.ai.OpenAiModelCatalogService;
+import com.classroomassistant.desktop.model.DesktopAsrModelManager;
+import com.classroomassistant.desktop.model.DesktopKwsModelManager;
 import com.classroomassistant.desktop.platform.DesktopPlatformProvider;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +66,12 @@ public class DesktopSettingsController {
     private static final String KEY_RECORDING_SAVE_ENABLED = "recording.saveEnabled";
     private static final String KEY_RECORDING_RETENTION_DAYS = "recording.retentionDays";
     private static final String KEY_ASR_LOCAL_ENABLED = "speech.asr.local.enabled";
+    private static final String KEY_ASR_LOCAL_MODEL_ID = "speech.asr.local.modelId";
     private static final String KEY_ASR_CLOUD_WHISPER_ENABLED = "speech.asr.cloud.whisper.enabled";
+    private static final String KEY_KWS_MODEL_ID = "speech.kws.modelId";
+    private static final String KEY_CUSTOM_MODEL_ENABLED = "model.custom.enabled";
+    private static final String KEY_CUSTOM_KWS_MODEL_URL = "model.custom.kws.url";
+    private static final String KEY_CUSTOM_ASR_MODEL_URL = "model.custom.asr.url";
     private static final String KEY_WAKE_ALERT_MODE = "speech.kws.wakeAlertMode";
     private static final String KEY_LOG_MODE = "developer.log.mode";
     private static final String KEY_LOG_SHOW_DIAGNOSTIC = "developer.log.showDiagnostic";
@@ -79,6 +86,8 @@ public class DesktopSettingsController {
     private static final String SECURE_AI_TOKEN = "ai.token";
     private static final String SECURE_AI_SECRET = "ai.secret";
     private static final String SECURE_SPEECH_API_KEY = "speech.apiKey";
+
+    private static final String DEFAULT_ASR_MODEL_ID = "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16";
 
     /** AI 平台类型枚举（与 src 端 ModelType 保持一致） */
     private enum AiProvider {
@@ -263,9 +272,16 @@ public class DesktopSettingsController {
     private final DesktopPlatformProvider platformProvider;
     private final PlatformPreferences prefs;
     private final PlatformSecureStorage secureStorage;
+    private final DesktopKwsModelManager kwsModelManager;
+    private final DesktopAsrModelManager asrModelManager;
     private final OpenAiModelCatalogService openAiModelCatalogService = new OpenAiModelCatalogService();
     private final ExecutorService modelCatalogExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "desktop-openai-model-catalog-fetcher");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ExecutorService modelDownloadExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "desktop-model-downloader");
         thread.setDaemon(true);
         return thread;
     });
@@ -369,9 +385,19 @@ public class DesktopSettingsController {
 
     // ── 模型管理区（桌面端精简版，无 ModelDownloadManager）──
     @FXML
-    private ComboBox<?> currentModelComboBox;
+    private ComboBox<DesktopKwsModelManager.KwsModelOption> currentModelComboBox;
+    @FXML
+    private Label kwsModelStatusLabel;
+    @FXML
+    private TextField customKwsModelUrlField;
     @FXML
     private VBox modelOptionsBox;
+    @FXML
+    private ComboBox<DesktopAsrModelManager.AsrModelOption> asrModelComboBox;
+    @FXML
+    private Label asrModelStatusLabel;
+    @FXML
+    private TextField customAsrModelUrlField;
     @FXML
     private VBox auxModelOptionsBox;
     @FXML
@@ -390,6 +416,8 @@ public class DesktopSettingsController {
         this.platformProvider = platformProvider;
         this.prefs = platformProvider.getPreferences();
         this.secureStorage = platformProvider.getSecureStorage();
+        this.kwsModelManager = new DesktopKwsModelManager(platformProvider.getStorage());
+        this.asrModelManager = new DesktopAsrModelManager(platformProvider.getStorage());
     }
 
     // =========================================================================
@@ -495,16 +523,8 @@ public class DesktopSettingsController {
             });
         }
 
-        // ── 桌面端模型管理区暂不可用，隐藏相关按钮 ──
-        if (downloadSelectedButton != null) {
-            downloadSelectedButton.setDisable(true);
-        }
-        if (refreshModelStatusButton != null) {
-            refreshModelStatusButton.setDisable(true);
-        }
-        if (modelDownloadStatusLabel != null) {
-            modelDownloadStatusLabel.setText("桌面端模型下载功能开发中");
-        }
+        // ── 模型管理区 ──
+        initializeModelManagementSection();
 
         // ── 加载已有配置 ──
         loadPreferences();
@@ -597,6 +617,12 @@ public class DesktopSettingsController {
 
         // 语音识别路线
         localAsrEnabledCheckBox.setSelected(prefs.getBoolean(KEY_ASR_LOCAL_ENABLED, true));
+        String savedAsrModelId = prefs.getString(KEY_ASR_LOCAL_MODEL_ID, "").isBlank()
+                ? DEFAULT_ASR_MODEL_ID
+                : prefs.getString(KEY_ASR_LOCAL_MODEL_ID, DEFAULT_ASR_MODEL_ID);
+        if (prefs.getString(KEY_ASR_LOCAL_MODEL_ID, "").isBlank()) {
+            prefs.putString(KEY_ASR_LOCAL_MODEL_ID, savedAsrModelId);
+        }
         boolean cloudWhisperEnabled = prefs.getBoolean(KEY_ASR_CLOUD_WHISPER_ENABLED, false);
         cloudWhisperEnabledCheckBox.setSelected(cloudWhisperEnabled);
         speechApiKeyBox.setVisible(cloudWhisperEnabled);
@@ -605,6 +631,34 @@ public class DesktopSettingsController {
         if (speechKey != null && !speechKey.isBlank()) {
             speechApiKeyField.setText(speechKey);
         }
+
+        // 模型管理
+        String savedKwsModelId = prefs.getString(KEY_KWS_MODEL_ID, "").isBlank()
+                ? kwsModelManager.getDefaultModelId()
+                : prefs.getString(KEY_KWS_MODEL_ID, kwsModelManager.getDefaultModelId());
+        String savedCustomKwsUrl = prefs.getString(KEY_CUSTOM_KWS_MODEL_URL, "");
+        String savedCustomAsrUrl = prefs.getString(KEY_CUSTOM_ASR_MODEL_URL, "");
+
+        DesktopKwsModelManager.KwsModelOption selectedKwsOption = kwsModelManager.getOptionById(savedKwsModelId);
+        if (selectedKwsOption == null) {
+            selectedKwsOption = kwsModelManager.getOptionById(kwsModelManager.getDefaultModelId());
+        }
+        if (selectedKwsOption != null) {
+            currentModelComboBox.getSelectionModel().select(selectedKwsOption);
+        }
+
+        DesktopAsrModelManager.AsrModelOption selectedAsrOption = asrModelManager.getOptionById(savedAsrModelId);
+        if (selectedAsrOption == null) {
+            selectedAsrOption = asrModelManager.getOptionById(asrModelManager.getDefaultModelId());
+        }
+        if (selectedAsrOption != null) {
+            asrModelComboBox.getSelectionModel().select(selectedAsrOption);
+        }
+
+        customKwsModelUrlField.setText(savedCustomKwsUrl == null ? "" : savedCustomKwsUrl);
+        customAsrModelUrlField.setText(savedCustomAsrUrl == null ? "" : savedCustomAsrUrl);
+        updateCustomModelUrlVisibility();
+        refreshModelStatus();
 
         // 开发者选项
         String logMode = prefs.getString(KEY_LOG_MODE, "SIMPLE");
@@ -795,6 +849,173 @@ public class DesktopSettingsController {
         });
     }
 
+    private void initializeModelManagementSection() {
+        if (currentModelComboBox != null) {
+            currentModelComboBox.setItems(FXCollections.observableArrayList(kwsModelManager.getAvailableModels()));
+            currentModelComboBox.setConverter(new StringConverter<>() {
+                @Override
+                public String toString(DesktopKwsModelManager.KwsModelOption object) {
+                    return object == null ? "" : object.name() + "（" + object.sizeLabel() + "）";
+                }
+
+                @Override
+                public DesktopKwsModelManager.KwsModelOption fromString(String string) {
+                    return null;
+                }
+            });
+            currentModelComboBox.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+                updateCustomModelUrlVisibility();
+                refreshModelStatus();
+            });
+        }
+        if (asrModelComboBox != null) {
+            asrModelComboBox.setItems(FXCollections.observableArrayList(asrModelManager.getAvailableModels()));
+            asrModelComboBox.setConverter(new StringConverter<>() {
+                @Override
+                public String toString(DesktopAsrModelManager.AsrModelOption object) {
+                    return object == null ? "" : object.name() + "（" + object.sizeLabel() + "）";
+                }
+
+                @Override
+                public DesktopAsrModelManager.AsrModelOption fromString(String string) {
+                    return null;
+                }
+            });
+            asrModelComboBox.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+                updateCustomModelUrlVisibility();
+                refreshModelStatus();
+            });
+        }
+
+        if (customKwsModelUrlField != null) {
+            customKwsModelUrlField.textProperty().addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
+        }
+        if (customAsrModelUrlField != null) {
+            customAsrModelUrlField.textProperty().addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
+        }
+        if (downloadSelectedButton != null) {
+            downloadSelectedButton.setDisable(false);
+        }
+        if (refreshModelStatusButton != null) {
+            refreshModelStatusButton.setDisable(false);
+        }
+    }
+
+    private void updateCustomModelUrlVisibility() {
+        DesktopKwsModelManager.KwsModelOption kwsOption = resolveSelectedKwsOption();
+        DesktopAsrModelManager.AsrModelOption asrOption = resolveSelectedAsrOption();
+
+        boolean showKwsCustom = kwsOption != null && DesktopKwsModelManager.CUSTOM_MODEL_ID.equals(kwsOption.id());
+        boolean showAsrCustom = asrOption != null && DesktopAsrModelManager.CUSTOM_MODEL_ID.equals(asrOption.id());
+
+        if (customKwsModelUrlField != null) {
+            customKwsModelUrlField.setVisible(showKwsCustom);
+            customKwsModelUrlField.setManaged(showKwsCustom);
+        }
+        if (customAsrModelUrlField != null) {
+            customAsrModelUrlField.setVisible(showAsrCustom);
+            customAsrModelUrlField.setManaged(showAsrCustom);
+        }
+    }
+
+    private DesktopKwsModelManager.KwsModelOption resolveSelectedKwsOption() {
+        DesktopKwsModelManager.KwsModelOption selected = currentModelComboBox == null
+                ? null
+                : currentModelComboBox.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            return selected;
+        }
+        return kwsModelManager.getOptionById(kwsModelManager.getDefaultModelId());
+    }
+
+    private DesktopAsrModelManager.AsrModelOption resolveSelectedAsrOption() {
+        DesktopAsrModelManager.AsrModelOption selected = asrModelComboBox == null
+                ? null
+                : asrModelComboBox.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            return selected;
+        }
+        return asrModelManager.getOptionById(asrModelManager.getDefaultModelId());
+    }
+
+    private boolean isCustomModelEnabled() {
+        DesktopKwsModelManager.KwsModelOption kwsOption = resolveSelectedKwsOption();
+        DesktopAsrModelManager.AsrModelOption asrOption = resolveSelectedAsrOption();
+        boolean usingCustomKws = kwsOption != null && DesktopKwsModelManager.CUSTOM_MODEL_ID.equals(kwsOption.id());
+        boolean usingCustomAsr = asrOption != null && DesktopAsrModelManager.CUSTOM_MODEL_ID.equals(asrOption.id());
+        boolean hasCustomKwsUrl = customKwsModelUrlField != null
+                && customKwsModelUrlField.getText() != null
+                && !customKwsModelUrlField.getText().trim().isBlank();
+        boolean hasCustomAsrUrl = customAsrModelUrlField != null
+                && customAsrModelUrlField.getText() != null
+                && !customAsrModelUrlField.getText().trim().isBlank();
+        return usingCustomKws || usingCustomAsr || hasCustomKwsUrl || hasCustomAsrUrl;
+    }
+
+    private void downloadKwsModel(DesktopKwsModelManager.KwsModelOption option) throws Exception {
+        if (option == null) {
+            return;
+        }
+        if (kwsModelManager.isModelReady(option.id())) {
+            return;
+        }
+        if (DesktopKwsModelManager.CUSTOM_MODEL_ID.equals(option.id())) {
+            String customUrl = customKwsModelUrlField == null ? "" : customKwsModelUrlField.getText();
+            kwsModelManager.downloadAndPrepareFromUrl(
+                    option.id(),
+                    customUrl,
+                    (downloaded, total) -> runOnFxThread(() -> {
+                        int percent = total <= 0 ? 0 : (int) ((downloaded * 100L) / total);
+                        modelDownloadStatusLabel.setText("KWS下载中 " + percent + "%");
+                    }),
+                    event -> runOnFxThread(() -> modelDownloadStatusLabel.setText("KWS: " + event)));
+            return;
+        }
+        kwsModelManager.downloadAndPrepare(
+                option.id(),
+                (downloaded, total) -> runOnFxThread(() -> {
+                    int percent = total <= 0 ? 0 : (int) ((downloaded * 100L) / total);
+                    modelDownloadStatusLabel.setText("KWS下载中 " + percent + "%");
+                }),
+                event -> runOnFxThread(() -> modelDownloadStatusLabel.setText("KWS: " + event)));
+    }
+
+    private void downloadAsrModel(DesktopAsrModelManager.AsrModelOption option) throws Exception {
+        if (option == null) {
+            return;
+        }
+        if (asrModelManager.isModelReady(option.id())) {
+            return;
+        }
+        if (DesktopAsrModelManager.CUSTOM_MODEL_ID.equals(option.id())) {
+            String customUrl = customAsrModelUrlField == null ? "" : customAsrModelUrlField.getText();
+            asrModelManager.downloadAndPrepareFromUrl(
+                    option.id(),
+                    customUrl,
+                    (downloaded, total) -> runOnFxThread(() -> {
+                        int percent = total <= 0 ? 0 : (int) ((downloaded * 100L) / total);
+                        modelDownloadStatusLabel.setText("ASR下载中 " + percent + "%");
+                    }),
+                    event -> runOnFxThread(() -> modelDownloadStatusLabel.setText("ASR: " + event)));
+            return;
+        }
+        asrModelManager.downloadAndPrepare(
+                option.id(),
+                (downloaded, total) -> runOnFxThread(() -> {
+                    int percent = total <= 0 ? 0 : (int) ((downloaded * 100L) / total);
+                    modelDownloadStatusLabel.setText("ASR下载中 " + percent + "%");
+                }),
+                event -> runOnFxThread(() -> modelDownloadStatusLabel.setText("ASR: " + event)));
+    }
+
+    private void runOnFxThread(Runnable task) {
+        if (Platform.isFxApplicationThread()) {
+            task.run();
+        } else {
+            Platform.runLater(task);
+        }
+    }
+
     // =========================================================================
     // 保存 / 取消
     // =========================================================================
@@ -852,6 +1073,24 @@ public class DesktopSettingsController {
                 secureStorage.storeSecure(SECURE_SPEECH_API_KEY, speechKey.trim());
             }
 
+            // 模型管理
+            DesktopKwsModelManager.KwsModelOption selectedKwsOption = resolveSelectedKwsOption();
+            DesktopAsrModelManager.AsrModelOption selectedAsrOption = resolveSelectedAsrOption();
+            String selectedKwsModelId = selectedKwsOption == null
+                    ? kwsModelManager.getDefaultModelId()
+                    : selectedKwsOption.id();
+            String selectedAsrModelId = selectedAsrOption == null
+                    ? DEFAULT_ASR_MODEL_ID
+                    : selectedAsrOption.id();
+
+            prefs.putString(KEY_KWS_MODEL_ID, selectedKwsModelId);
+            prefs.putString(KEY_ASR_LOCAL_MODEL_ID, selectedAsrModelId);
+            prefs.putBoolean(KEY_CUSTOM_MODEL_ENABLED, isCustomModelEnabled());
+            prefs.putString(KEY_CUSTOM_KWS_MODEL_URL,
+                    customKwsModelUrlField == null ? "" : customKwsModelUrlField.getText().trim());
+            prefs.putString(KEY_CUSTOM_ASR_MODEL_URL,
+                    customAsrModelUrlField == null ? "" : customAsrModelUrlField.getText().trim());
+
             // 开发者选项
             prefs.putString(KEY_LOG_MODE, logModeFull.isSelected() ? "FULL" : "SIMPLE");
             prefs.putBoolean(KEY_LOG_SHOW_DIAGNOSTIC, showDiagnosticLogsCheckBox.isSelected());
@@ -889,17 +1128,91 @@ public class DesktopSettingsController {
         closeWindow();
     }
 
-    // ── 模型管理桩方法（桌面端暂未实现完整的模型下载管理）──
+    // ── 模型管理 ──
     @FXML
     private void downloadSelectedModels() {
-        platformProvider.showToast("桌面端模型下载功能开发中");
+        DesktopKwsModelManager.KwsModelOption selectedKws = resolveSelectedKwsOption();
+        DesktopAsrModelManager.AsrModelOption selectedAsr = resolveSelectedAsrOption();
+        if (selectedKws == null && selectedAsr == null) {
+            if (modelDownloadStatusLabel != null) {
+                modelDownloadStatusLabel.setText("未选择模型");
+            }
+            return;
+        }
+
+        if (downloadSelectedButton != null) {
+            downloadSelectedButton.setDisable(true);
+        }
+        if (refreshModelStatusButton != null) {
+            refreshModelStatusButton.setDisable(true);
+        }
+        if (modelDownloadStatusLabel != null) {
+            modelDownloadStatusLabel.setText("开始下载模型...");
+        }
+
+        modelDownloadExecutor.submit(() -> {
+            try {
+                downloadKwsModel(selectedKws);
+                downloadAsrModel(selectedAsr);
+                runOnFxThread(() -> {
+                    if (modelDownloadStatusLabel != null) {
+                        modelDownloadStatusLabel.setText("模型下载完成");
+                    }
+                    refreshModelStatus();
+                });
+            } catch (Exception error) {
+                logger.error("下载模型失败", error);
+                runOnFxThread(() -> {
+                    String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+                    if (modelDownloadStatusLabel != null) {
+                        modelDownloadStatusLabel.setText("下载失败: " + message);
+                    }
+                    platformProvider.showToast("模型下载失败: " + message);
+                    refreshModelStatus();
+                });
+            } finally {
+                runOnFxThread(() -> {
+                    if (downloadSelectedButton != null) {
+                        downloadSelectedButton.setDisable(false);
+                    }
+                    if (refreshModelStatusButton != null) {
+                        refreshModelStatusButton.setDisable(false);
+                    }
+                });
+            }
+        });
     }
 
     @FXML
     private void refreshModelStatus() {
-        if (modelDownloadStatusLabel != null) {
-            modelDownloadStatusLabel.setText("桌面端模型状态查询开发中");
+        DesktopKwsModelManager.KwsModelOption selectedKws = resolveSelectedKwsOption();
+        DesktopAsrModelManager.AsrModelOption selectedAsr = resolveSelectedAsrOption();
+        boolean kwsReady = selectedKws != null && kwsModelManager.isModelReady(selectedKws.id());
+        boolean asrReady = selectedAsr != null && asrModelManager.isModelReady(selectedAsr.id());
+
+        if (kwsModelStatusLabel != null) {
+            String name = selectedKws == null ? "未选择" : selectedKws.name();
+            kwsModelStatusLabel.setText("KWS状态: " + name + " - " + (kwsReady ? "已就绪" : "未下载"));
         }
+        if (asrModelStatusLabel != null) {
+            String name = selectedAsr == null ? "未选择" : selectedAsr.name();
+            asrModelStatusLabel.setText("ASR状态: " + name + " - " + (asrReady ? "已就绪" : "未下载"));
+        }
+
+        if (modelDownloadStatusLabel != null) {
+            modelDownloadStatusLabel.setText(buildLocalModelStatusText());
+        }
+    }
+
+    private String buildLocalModelStatusText() {
+        DesktopKwsModelManager.KwsModelOption selectedKws = resolveSelectedKwsOption();
+        DesktopAsrModelManager.AsrModelOption selectedAsr = resolveSelectedAsrOption();
+        boolean kwsReady = selectedKws != null && kwsModelManager.isModelReady(selectedKws.id());
+        boolean asrReady = selectedAsr != null && asrModelManager.isModelReady(selectedAsr.id());
+        String kwsName = selectedKws == null ? "未选择" : selectedKws.name();
+        String asrName = selectedAsr == null ? "未选择" : selectedAsr.name();
+        return "KWS: " + kwsName + "(" + (kwsReady ? "已就绪" : "未下载") + ")"
+                + " | ASR: " + asrName + "(" + (asrReady ? "已就绪" : "未下载") + ")";
     }
 
     // =========================================================================
@@ -911,11 +1224,15 @@ public class DesktopSettingsController {
             return;
         }
         Stage stage = (Stage) statusLabel.getScene().getWindow();
-        stage.setOnHidden(event -> modelCatalogExecutor.shutdownNow());
+        stage.setOnHidden(event -> {
+            modelCatalogExecutor.shutdownNow();
+            modelDownloadExecutor.shutdownNow();
+        });
     }
 
     private void closeWindow() {
         modelCatalogExecutor.shutdownNow();
+        modelDownloadExecutor.shutdownNow();
         if (statusLabel != null && statusLabel.getScene() != null) {
             Stage stage = (Stage) statusLabel.getScene().getWindow();
             stage.close();

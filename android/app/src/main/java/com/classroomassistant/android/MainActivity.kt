@@ -111,6 +111,8 @@ private const val KEY_APP_LANGUAGE = "app.language"
 private const val KEY_UPDATE_IGNORE_BEFORE_VERSION_CODE = "app.update.ignoreBeforeVersionCode"
 private const val KEY_UPDATE_LAST_PROMPTED_VERSION_CODE = "app.update.lastPromptedVersionCode"
 private const val KEY_PENDING_UPDATE_APK_PATH = "app.update.pendingApkPath"
+private const val KEY_PENDING_UPDATE_APK_SAVED_AT = "app.update.pendingApkSavedAt"
+private const val KEY_PENDING_UPDATE_VERSION_KEY = "app.update.pendingVersionKey"
 private const val UPDATE_GITHUB_REPO = "JaneJane123654/dianmingbuyongpa"
 private const val UPDATE_RELEASES_API_URL = "https://api.github.com/repos/$UPDATE_GITHUB_REPO/releases/latest"
 private const val UPDATE_RELEASES_WEB_URL = "https://github.com/$UPDATE_GITHUB_REPO/releases"
@@ -122,6 +124,7 @@ private const val NOTIFICATION_CHANNEL_QUIET_SOUND = "quiet_alert_sound"
 private const val NOTIFICATION_ID_WAKE = 11001
 private const val NOTIFICATION_ID_QUIET = 11002
 private const val WAKE_STATUS_DISPLAY_MS = 3_000L
+private const val PENDING_UPDATE_APK_TTL_MS = 24L * 60L * 60L * 1000L
 private const val VAD_SPEECH_RMS_THRESHOLD = 0.003f
 private const val LOOKBACK_SECONDS_DEFAULT = 20
 private const val LOOKBACK_SECONDS_MIN = 8
@@ -411,15 +414,30 @@ private fun hasNewerRelease(localVersionName: String, remoteTagName: String): Bo
     return compareVersionNames(remoteTagName, localVersionName) > 0
 }
 
+private fun getManagedUpdateDirs(context: Context): List<File> {
+    return listOf(
+        File(context.filesDir, "updates"),
+        File(context.cacheDir, "updates")
+    )
+}
+
+private fun isManagedUpdateApkPath(context: Context, file: File): Boolean {
+    val candidate = runCatching { file.canonicalFile }.getOrNull() ?: return false
+    if (!candidate.name.endsWith(".apk", ignoreCase = true)) {
+        return false
+    }
+    val candidatePath = candidate.path
+    return getManagedUpdateDirs(context).any { dir ->
+        val canonicalDir = runCatching { dir.canonicalFile }.getOrNull() ?: return@any false
+        val prefix = canonicalDir.path + File.separator
+        candidatePath.startsWith(prefix)
+    }
+}
+
 private fun safeDeleteDownloadedApk(context: Context, absolutePath: String): Boolean {
     return runCatching {
         val file = File(absolutePath).canonicalFile
-        val updatesDir = File(context.cacheDir, "updates").canonicalFile
-        val updatesPrefix = updatesDir.path + File.separator
-        if (!file.path.startsWith(updatesPrefix)) {
-            return@runCatching false
-        }
-        if (!file.name.endsWith(".apk", ignoreCase = true)) {
+        if (!isManagedUpdateApkPath(context, file)) {
             return@runCatching false
         }
         file.delete() || !file.exists()
@@ -436,8 +454,7 @@ private fun cleanupPendingInstallerPackage(
         return
     }
     val deleted = safeDeleteDownloadedApk(context, pendingPath)
-    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
-    preferences.flush()
+    clearPendingInstallerRecord(preferences)
     if (deleted) {
         onLog("已清理旧更新安装包")
     } else {
@@ -445,11 +462,87 @@ private fun cleanupPendingInstallerPackage(
     }
 }
 
+private fun isPendingInstallerStillValid(preferences: AndroidPreferences): Boolean {
+    val savedAt = preferences.getLong(KEY_PENDING_UPDATE_APK_SAVED_AT, 0L)
+    if (savedAt <= 0L) {
+        return false
+    }
+    val age = System.currentTimeMillis() - savedAt
+    return age in 0..PENDING_UPDATE_APK_TTL_MS
+}
+
+private fun clearPendingInstallerRecord(preferences: AndroidPreferences) {
+    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
+    preferences.remove(KEY_PENDING_UPDATE_APK_SAVED_AT)
+    preferences.remove(KEY_PENDING_UPDATE_VERSION_KEY)
+    preferences.flush()
+}
+
+private fun clearPendingInstallerIfInstalled(
+    context: Context,
+    preferences: AndroidPreferences,
+    onLog: (String) -> Unit
+) {
+    val pendingPath = preferences.getString(KEY_PENDING_UPDATE_APK_PATH, "").orEmpty().trim()
+    if (pendingPath.isBlank()) {
+        return
+    }
+    val pendingVersionKey = preferences.getLong(KEY_PENDING_UPDATE_VERSION_KEY, 0L)
+    if (pendingVersionKey <= 0L) {
+        return
+    }
+    val currentVersionKey = buildVersionKey(currentAppVersionName(context))
+    if (currentVersionKey <= 0L || currentVersionKey < pendingVersionKey) {
+        return
+    }
+    safeDeleteDownloadedApk(context, pendingPath)
+    clearPendingInstallerRecord(preferences)
+    onLog("检测到应用已升级，已清理旧安装包记录")
+}
+
+private fun tryInstallPendingApk(
+    context: Context,
+    preferences: AndroidPreferences,
+    onLog: (String) -> Unit
+): Boolean {
+    val pendingPath = preferences.getString(KEY_PENDING_UPDATE_APK_PATH, "").orEmpty().trim()
+    if (pendingPath.isBlank()) {
+        return false
+    }
+    if (!isPendingInstallerStillValid(preferences)) {
+        safeDeleteDownloadedApk(context, pendingPath)
+        clearPendingInstallerRecord(preferences)
+        onLog("旧安装包记录已过期，已清理")
+        return false
+    }
+    val pendingFile = runCatching { File(pendingPath).canonicalFile }.getOrNull()
+    if (pendingFile == null || !pendingFile.exists() || !isManagedUpdateApkPath(context, pendingFile)) {
+        clearPendingInstallerRecord(preferences)
+        onLog("安装包不存在，已清理安装记录")
+        return false
+    }
+    return runCatching {
+        startApkInstallIntent(context, pendingFile)
+        onLog("检测到未完成更新安装，已重新打开安装器")
+        true
+    }.getOrElse {
+        onLog("重新打开安装器失败: ${it.message ?: it.javaClass.simpleName}")
+        false
+    }
+}
+
 private fun startApkInstallIntent(context: Context, apkFile: File) {
+    val canonicalApk = apkFile.canonicalFile
+    if (!canonicalApk.exists()) {
+        throw IOException("安装包不存在: ${canonicalApk.absolutePath}")
+    }
+    if (!isManagedUpdateApkPath(context, canonicalApk)) {
+        throw IOException("安装包路径不在安全目录: ${canonicalApk.absolutePath}")
+    }
     val apkUri = FileProvider.getUriForFile(
         context,
         "${context.packageName}$FILE_PROVIDER_AUTHORITY_SUFFIX",
-        apkFile
+        canonicalApk
     )
     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
         setDataAndType(apkUri, "application/vnd.android.package-archive")
@@ -470,7 +563,7 @@ private fun downloadReleaseApk(
     releaseTag: String,
     asset: UpdateReleaseAsset
 ): File {
-    val updatesDir = File(context.cacheDir, "updates")
+    val updatesDir = File(context.filesDir, "updates")
     if (!updatesDir.exists()) {
         updatesDir.mkdirs()
     }
@@ -765,18 +858,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { }
 
-    override fun onResume() {
-        super.onResume()
-        runCatching {
-            val preferences = AndroidPreferences(applicationContext)
-            cleanupPendingInstallerPackage(applicationContext, preferences) {
-                android.util.Log.i("MainActivity", it)
-            }
-        }.onFailure {
-            android.util.Log.w("MainActivity", "清理安装包失败", it)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppCrashMonitor.install(applicationContext)
@@ -1064,6 +1145,11 @@ fun AppNavigation(
         }
     }
 
+    LaunchedEffect(Unit) {
+        clearPendingInstallerIfInstalled(context.applicationContext, preferences) { appendLog(it) }
+        tryInstallPendingApk(context.applicationContext, preferences) { appendLog(it) }
+    }
+
     fun appendEngineLog(message: String) {
         if (shouldDisplayEngineLog(message, settings)) {
             appendLog(message)
@@ -1183,43 +1269,24 @@ fun AppNavigation(
                 cleanupPendingInstallerPackage(appContext, preferences) { appendLog(it) }
                 val apkFile = downloadReleaseApk(releaseHttpClient, appContext, release.tagName, asset)
                 preferences.putString(KEY_PENDING_UPDATE_APK_PATH, apkFile.absolutePath)
+                preferences.putLong(KEY_PENDING_UPDATE_APK_SAVED_AT, System.currentTimeMillis())
+                preferences.putLong(KEY_PENDING_UPDATE_VERSION_KEY, release.versionKey)
                 preferences.flush()
                 withContext(Dispatchers.Main) {
                     updateStatusMessage = t("下载完成，正在打开安装器...", "Download complete, opening installer...")
-                    try {
-                        startApkInstallIntent(appContext, apkFile)
-                    } catch (e: Exception) {
-                        updateStatusMessage = t(
-                            "无法打开安装器: ${e.message ?: "未知错误"}",
-                            "Failed to open installer: ${e.message ?: "unknown error"}"
-                        )
-                    }
+                    startApkInstallIntent(appContext, apkFile)
                 }
-                delay(90_000)
-                val deleted = safeDeleteDownloadedApk(appContext, apkFile.absolutePath)
-                if (deleted) {
-                    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
-                    preferences.flush()
-                    withContext(Dispatchers.Main) {
-                        updateStatusMessage = t(
-                            "安装包已自动清理。若安装成功，请重启应用确认版本。",
-                            "Installer package cleaned up. Restart app to verify version after install."
-                        )
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        updateStatusMessage = t(
-                            "安装包仍在使用中，稍后会自动重试清理。",
-                            "Installer package still in use, cleanup will retry later."
-                        )
-                    }
+                withContext(Dispatchers.Main) {
+                    updateStatusMessage = t(
+                        "安装器已打开，请按系统提示完成安装；若中断，重新打开应用会自动继续安装。",
+                        "Installer opened. Complete installation in system UI; if interrupted, reopen the app to resume."
+                    )
                 }
             } catch (e: Exception) {
                 val pendingPath = preferences.getString(KEY_PENDING_UPDATE_APK_PATH, "").orEmpty().trim()
                 if (pendingPath.isNotBlank()) {
                     safeDeleteDownloadedApk(appContext, pendingPath)
-                    preferences.remove(KEY_PENDING_UPDATE_APK_PATH)
-                    preferences.flush()
+                    clearPendingInstallerRecord(preferences)
                 }
                 withContext(Dispatchers.Main) {
                     updateStatusMessage = t(
@@ -2241,7 +2308,6 @@ fun AppNavigation(
             return@LaunchedEffect
         }
         hasAutoCheckedUpdate = true
-        cleanupPendingInstallerPackage(context.applicationContext, preferences) { appendLog(it) }
         checkForUpdate(manual = false)
     }
 

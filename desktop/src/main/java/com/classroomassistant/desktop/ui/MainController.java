@@ -1,6 +1,7 @@
 package com.classroomassistant.desktop.ui;
 
 import com.classroomassistant.desktop.platform.DesktopPlatformProvider;
+import com.classroomassistant.desktop.session.DesktopMonitoringSessionManager;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -36,6 +37,7 @@ public class MainController {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final DesktopPlatformProvider platformProvider;
+    private final DesktopMonitoringSessionManager sessionManager;
 
     // UI 状态属性
     private final StringProperty recordingStatusText = new SimpleStringProperty("未录音");
@@ -44,8 +46,6 @@ public class MainController {
     private final StringProperty lectureText = new SimpleStringProperty("");
     private final StringProperty answerText = new SimpleStringProperty("");
     private final StringProperty hintText = new SimpleStringProperty("就绪");
-
-    private volatile boolean isRecording = false;
 
     @FXML
     private Button startButton;
@@ -89,6 +89,9 @@ public class MainController {
     @FXML
     private Button clearLogButton;
 
+    @FXML
+    private Button triggerNowButton;
+
     /**
      * 构造主界面控制器
      *
@@ -96,6 +99,7 @@ public class MainController {
      */
     public MainController(DesktopPlatformProvider platformProvider) {
         this.platformProvider = platformProvider;
+        this.sessionManager = new DesktopMonitoringSessionManager(platformProvider);
     }
 
     /**
@@ -113,6 +117,9 @@ public class MainController {
 
         // 按钮状态
         stopButton.setDisable(true);
+        if (triggerNowButton != null) {
+            triggerNowButton.setDisable(true);
+        }
 
         // 显示引擎状态
         engineStatusLabel.setText("引擎: API");
@@ -120,6 +127,57 @@ public class MainController {
 
         // 录音保存状态
         recordingSaveStatusLabel.setText("未启用");
+
+        sessionManager.setListener(new DesktopMonitoringSessionManager.Listener() {
+            @Override
+            public void onRecordingStatus(String text) {
+                Platform.runLater(() -> {
+                    recordingStatusText.set(text);
+                    boolean active = "录音中".equals(text);
+                    startButton.setDisable(active);
+                    stopButton.setDisable(!active);
+                    if (triggerNowButton != null) {
+                        triggerNowButton.setDisable(!active);
+                    }
+                });
+            }
+
+            @Override
+            public void onDetectionStatus(String text) {
+                Platform.runLater(() -> detectionStatusText.set(text));
+            }
+
+            @Override
+            public void onQuietSeconds(String text) {
+                Platform.runLater(() -> quietSecondsText.set(text));
+            }
+
+            @Override
+            public void onRecordingSaveStatus(String text) {
+                Platform.runLater(() -> recordingSaveStatusLabel.setText(text));
+            }
+
+            @Override
+            public void onRecognitionText(String text) {
+                Platform.runLater(() -> lectureText.set(text));
+            }
+
+            @Override
+            public void onAnswerText(String text) {
+                Platform.runLater(() -> answerText.set(text));
+            }
+
+            @Override
+            public void onHintText(String text) {
+                Platform.runLater(() -> hintText.set(text));
+            }
+
+            @Override
+            public void onLog(String message) {
+                appendLog(message);
+            }
+        });
+        sessionManager.loadCurrentSettings();
 
         appendLog("应用已启动");
     }
@@ -129,36 +187,7 @@ public class MainController {
      */
     @FXML
     private void startClass() {
-        if (isRecording) {
-            return;
-        }
-
-        isRecording = true;
-        startButton.setDisable(true);
-        stopButton.setDisable(false);
-
-        recordingStatusText.set("录音中");
-        detectionStatusText.set("监听中");
-        hintText.set("正在监听");
-
-        appendLog("开始录音，进入监听状态");
-
-        // 启动音频采集
-        platformProvider.getAudioRecorder()
-                .start(new com.classroomassistant.core.platform.PlatformAudioRecorder.AudioDataListener() {
-                    @Override
-                    public void onAudioData(byte[] data, int length) {
-                        // 处理音频数据
-                    }
-
-                    @Override
-                    public void onError(String error) {
-                        Platform.runLater(() -> {
-                            appendLog("录音错误: " + error);
-                            hintText.set("录音错误: " + error);
-                        });
-                    }
-                });
+        sessionManager.startMonitoring();
     }
 
     /**
@@ -166,21 +195,12 @@ public class MainController {
      */
     @FXML
     private void stopClass() {
-        if (!isRecording) {
-            return;
-        }
+        sessionManager.stopMonitoring("停止监听");
+    }
 
-        isRecording = false;
-        startButton.setDisable(false);
-        stopButton.setDisable(true);
-
-        recordingStatusText.set("已停止");
-        detectionStatusText.set("未启动");
-        hintText.set("已停止");
-
-        platformProvider.getAudioRecorder().stop();
-
-        appendLog("停止录音");
+    @FXML
+    private void triggerRecognitionNow() {
+        sessionManager.triggerManualRecognition();
     }
 
     /**
@@ -218,6 +238,7 @@ public class MainController {
             settingsStage.setMinHeight(500);
             settingsStage.showAndWait();
 
+            sessionManager.reloadSettingsAndMaybeReinitialize();
             appendLog("设置窗口已关闭");
         } catch (IOException e) {
             logger.error("打开设置窗口失败", e);
@@ -242,5 +263,25 @@ public class MainController {
             String line = "[" + time + "] " + message + "\n";
             logTextArea.appendText(line);
         });
+    }
+
+    public void startFromShortcut() {
+        startClass();
+    }
+
+    public void stopFromShortcut() {
+        stopClass();
+    }
+
+    public void triggerFromShortcut() {
+        triggerRecognitionNow();
+    }
+
+    public void openSettingsFromShortcut() {
+        openSettings();
+    }
+
+    public void shutdown() {
+        sessionManager.shutdown();
     }
 }

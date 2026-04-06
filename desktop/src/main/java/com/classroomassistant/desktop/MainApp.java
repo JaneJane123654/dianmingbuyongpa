@@ -4,8 +4,11 @@ import com.classroomassistant.desktop.platform.DesktopPlatformProvider;
 import com.classroomassistant.desktop.ui.MainController;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.Parent;
 import javafx.stage.Stage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +37,7 @@ public class MainApp extends Application {
     private static final Logger logger = LoggerFactory.getLogger(MainApp.class);
 
     private DesktopPlatformProvider platformProvider;
+    private MainController mainController;
     
     @Override
     public void start(Stage primaryStage) throws Exception {
@@ -56,14 +60,16 @@ public class MainApp extends Application {
             });
 
             Parent root = loader.load();
+            this.mainController = loader.getController();
 
-            Scene scene = new Scene(root, 900, 700);
+            Scene scene = new Scene(root, 1280, 760);
             scene.getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
+            registerDesktopShortcuts(scene, mainController);
 
             primaryStage.setTitle("课堂助手 v3.0.0");
             primaryStage.setScene(scene);
-            primaryStage.setMinWidth(800);
-            primaryStage.setMinHeight(600);
+            primaryStage.setMinWidth(960);
+            primaryStage.setMinHeight(640);
 
             primaryStage.setOnCloseRequest(event -> {
                 logger.info("应用程序关闭");
@@ -84,10 +90,25 @@ public class MainApp extends Application {
     }
 
     private void shutdown() {
+        if (mainController != null) {
+            mainController.shutdown();
+        }
         if (platformProvider != null) {
             platformProvider.shutdown();
         }
         logger.info("应用已退出");
+    }
+
+    private void registerDesktopShortcuts(Scene scene, MainController controller) {
+        if (scene == null || controller == null) {
+            return;
+        }
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), controller::startFromShortcut);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F6), controller::stopFromShortcut);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F8), controller::triggerFromShortcut);
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.COMMA, KeyCombination.CONTROL_DOWN),
+                controller::openSettingsFromShortcut);
     }
     
     public static void main(String[] args) {
