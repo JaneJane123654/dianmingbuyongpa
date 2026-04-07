@@ -77,7 +77,7 @@ public class DesktopSpeechRecognitionService {
                 .addFormDataPart(
                         "file",
                         "audio.wav",
-                    RequestBody.create(wav, MediaType.parse("audio/wav")))
+                        RequestBody.create(wav, MediaType.parse("audio/wav")))
                 .build();
 
         Request request = new Request.Builder()

@@ -220,7 +220,8 @@ public class DesktopSettingsController {
             Map.entry(AiProvider.STEPFUN, List.of("step-2", "step-1v-8k", "step-1-8k")),
             Map.entry(AiProvider.XAI, List.of("grok-2-1212", "grok-beta", "grok-vision-beta")),
             Map.entry(AiProvider.FIREWORKS,
-                    List.of("accounts/fireworks/models/llama-v3p1-70b-instruct", "accounts/fireworks/models/qwen2p5-72b-instruct")),
+                    List.of("accounts/fireworks/models/llama-v3p1-70b-instruct",
+                            "accounts/fireworks/models/qwen2p5-72b-instruct")),
             Map.entry(AiProvider.TOGETHER_AI,
                     List.of("meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "Qwen/Qwen2.5-72B-Instruct-Turbo")),
             Map.entry(AiProvider.PERPLEXITY,
@@ -228,7 +229,8 @@ public class DesktopSettingsController {
             Map.entry(AiProvider.NOVITA,
                     List.of("meta-llama/llama-3.1-70b-instruct", "deepseek/deepseek-r1", "qwen/qwen2.5-72b-instruct")),
             Map.entry(AiProvider.REPLICATE,
-                    List.of("meta/meta-llama-3-70b-instruct", "mistralai/mistral-7b-instruct", "anthropic/claude-3-opus")),
+                    List.of("meta/meta-llama-3-70b-instruct", "mistralai/mistral-7b-instruct",
+                            "anthropic/claude-3-opus")),
             Map.entry(AiProvider.CEREBRAS,
                     List.of("llama3.1-8b", "llama3.1-70b", "qwen-2.5-72b")),
             Map.entry(AiProvider.SAMBANOVA,
@@ -888,10 +890,12 @@ public class DesktopSettingsController {
         }
 
         if (customKwsModelUrlField != null) {
-            customKwsModelUrlField.textProperty().addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
+            customKwsModelUrlField.textProperty()
+                    .addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
         }
         if (customAsrModelUrlField != null) {
-            customAsrModelUrlField.textProperty().addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
+            customAsrModelUrlField.textProperty()
+                    .addListener((obs, oldVal, newVal) -> updateCustomModelUrlVisibility());
         }
         if (downloadSelectedButton != null) {
             downloadSelectedButton.setDisable(false);

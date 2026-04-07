@@ -20,25 +20,26 @@ import org.slf4j.LoggerFactory;
 /**
  * 桌面端主应用程序
  *
- * <p>基于 JavaFX 框架的桌面应用启动类。
+ * <p>
+ * 基于 JavaFX 框架的桌面应用启动类。
  * 核心职责：
  * <ul>
- *   <li>实例化并初始化桌面平台提供者 {@link DesktopPlatformProvider}。</li>
- *   <li>配置 FXML 加载器，实现控制器的手动依赖注入。</li>
- *   <li>设置主舞台（Stage）的初始场景、样式表和窗口属性。</li>
- *   <li>在应用退出时触发优雅停机流程。</li>
+ * <li>实例化并初始化桌面平台提供者 {@link DesktopPlatformProvider}。</li>
+ * <li>配置 FXML 加载器，实现控制器的手动依赖注入。</li>
+ * <li>设置主舞台（Stage）的初始场景、样式表和窗口属性。</li>
+ * <li>在应用退出时触发优雅停机流程。</li>
  * </ul>
  *
  * @author Code Assistant
  * @date 2026-02-01
  */
 public class MainApp extends Application {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(MainApp.class);
 
     private DesktopPlatformProvider platformProvider;
     private MainController mainController;
-    
+
     @Override
     public void start(Stage primaryStage) throws Exception {
         try {
@@ -110,7 +111,7 @@ public class MainApp extends Application {
                 new KeyCodeCombination(KeyCode.COMMA, KeyCombination.CONTROL_DOWN),
                 controller::openSettingsFromShortcut);
     }
-    
+
     public static void main(String[] args) {
         Path javafxHome = Paths.get("").toAbsolutePath().resolve(".javafx");
         System.setProperty("user.home", javafxHome.toString());

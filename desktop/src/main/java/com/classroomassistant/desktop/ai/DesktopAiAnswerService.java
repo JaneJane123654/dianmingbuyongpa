@@ -139,7 +139,8 @@ public class DesktopAiAnswerService {
         try (okhttp3.Response response = client.newCall(request).execute()) {
             String payload = response.body() == null ? "" : response.body().string();
             if (!response.isSuccessful()) {
-                onLog.accept("AI问答失败: provider=" + provider + ", http=" + response.code() + ", body=" + truncate(payload, 280));
+                onLog.accept("AI问答失败: provider=" + provider + ", http=" + response.code() + ", body="
+                        + truncate(payload, 280));
                 return "";
             }
             String content = extractContent(payload);

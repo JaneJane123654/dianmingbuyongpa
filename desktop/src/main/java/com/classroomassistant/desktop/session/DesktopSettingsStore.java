@@ -6,7 +6,9 @@ import com.classroomassistant.core.platform.PlatformSecureStorage;
 /**
  * 桌面端设置读取器。
  *
- * <p>使用与 Android 一致的 key 命名，保证跨平台配置语义一致。</p>
+ * <p>
+ * 使用与 Android 一致的 key 命名，保证跨平台配置语义一致。
+ * </p>
  */
 public class DesktopSettingsStore {
 

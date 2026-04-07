@@ -29,7 +29,8 @@ public class DesktopAsrModelManager {
 
     public static final String CUSTOM_MODEL_ID = "custom-asr-url-model";
 
-    private static final List<String> REQUIRED_FILES = List.of("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt");
+    private static final List<String> REQUIRED_FILES = List.of("encoder.onnx", "decoder.onnx", "joiner.onnx",
+            "tokens.txt");
 
     private static final Map<String, Long> MIN_FILE_SIZE_BYTES = Map.of(
             "encoder.onnx", 16L * 1024L,

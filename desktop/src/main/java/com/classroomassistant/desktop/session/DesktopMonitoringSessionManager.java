@@ -37,7 +37,9 @@ import org.slf4j.LoggerFactory;
 /**
  * 桌面端会话编排器（业务层）。
  *
- * <p>负责唤醒监听、回溯识别、AI 回答与状态通知，不直接依赖 JavaFX 组件。</p>
+ * <p>
+ * 负责唤醒监听、回溯识别、AI 回答与状态通知，不直接依赖 JavaFX 组件。
+ * </p>
  */
 public class DesktopMonitoringSessionManager {
 
@@ -102,7 +104,8 @@ public class DesktopMonitoringSessionManager {
     public DesktopMonitoringSessionManager(DesktopPlatformProvider platformProvider) {
         this.platformProvider = Objects.requireNonNull(platformProvider, "platformProvider");
         this.audioRecorder = (DesktopAudioRecorder) platformProvider.getAudioRecorder();
-        this.settingsStore = new DesktopSettingsStore(platformProvider.getPreferences(), platformProvider.getSecureStorage());
+        this.settingsStore = new DesktopSettingsStore(platformProvider.getPreferences(),
+                platformProvider.getSecureStorage());
         this.modelLocator = new DesktopModelLocator(platformProvider.getStorage());
         this.kwsModelManager = new DesktopKwsModelManager(platformProvider.getStorage());
         this.asrModelManager = new DesktopAsrModelManager(platformProvider.getStorage());
@@ -455,7 +458,8 @@ public class DesktopMonitoringSessionManager {
         }
         long maxAgeMs = TimeUnit.DAYS.toMillis(retentionDays);
         long now = System.currentTimeMillis();
-        File[] files = recordingsDir.listFiles(file -> file.isFile() && file.getName().toLowerCase(Locale.ROOT).endsWith(".wav"));
+        File[] files = recordingsDir
+                .listFiles(file -> file.isFile() && file.getName().toLowerCase(Locale.ROOT).endsWith(".wav"));
         if (files == null) {
             return;
         }
@@ -646,7 +650,7 @@ public class DesktopMonitoringSessionManager {
         String modelName = option == null ? modelId : option.name();
         logUi("当前唤醒模型未就绪，准备自动下载: " + modelName + "(" + modelId + ")");
 
-        final int[] lastPercent = {-1};
+        final int[] lastPercent = { -1 };
         BiConsumer<Long, Long> onProgress = (downloaded, total) -> {
             if (total <= 0) {
                 emitHint("下载唤醒模型中...");
@@ -685,7 +689,7 @@ public class DesktopMonitoringSessionManager {
         String modelName = option == null ? modelId : option.name();
         logUi("本机ASR模型未就绪，准备自动下载: " + modelName + "(" + modelId + ")");
 
-        final int[] lastPercent = {-1};
+        final int[] lastPercent = { -1 };
         BiConsumer<Long, Long> onProgress = (downloaded, total) -> {
             if (total <= 0) {
                 emitHint("下载ASR模型中...");

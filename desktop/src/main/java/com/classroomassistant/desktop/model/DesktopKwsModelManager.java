@@ -29,7 +29,8 @@ public class DesktopKwsModelManager {
 
     public static final String CUSTOM_MODEL_ID = "custom-kws-url-model";
 
-    private static final List<String> REQUIRED_FILES = List.of("encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt");
+    private static final List<String> REQUIRED_FILES = List.of("encoder.onnx", "decoder.onnx", "joiner.onnx",
+            "tokens.txt");
     private static final List<String> OPTIONAL_KEYWORD_FILES = List.of("keywords.txt", "test_keywords.txt");
 
     private static final List<DownloadSource> DOWNLOAD_SOURCES = List.of(

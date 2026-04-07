@@ -11,8 +11,8 @@ import java.util.Objects;
  */
 public class DesktopModelLocator {
 
-    private static final String[] KWS_REQUIRED_FILES = {"encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt"};
-    private static final String[] ASR_REQUIRED_FILES = {"encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt"};
+    private static final String[] KWS_REQUIRED_FILES = { "encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt" };
+    private static final String[] ASR_REQUIRED_FILES = { "encoder.onnx", "decoder.onnx", "joiner.onnx", "tokens.txt" };
 
     private final PlatformStorage storage;
 

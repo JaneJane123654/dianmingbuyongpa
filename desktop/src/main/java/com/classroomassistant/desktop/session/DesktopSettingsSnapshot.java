@@ -5,7 +5,9 @@ import java.util.Objects;
 /**
  * 桌面端监听配置快照。
  *
- * <p>字段与 Android 端关键设置保持对齐，供桌面端业务层统一读取。</p>
+ * <p>
+ * 字段与 Android 端关键设置保持对齐，供桌面端业务层统一读取。
+ * </p>
  */
 public final class DesktopSettingsSnapshot {
 

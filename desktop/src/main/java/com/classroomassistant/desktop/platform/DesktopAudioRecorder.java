@@ -20,32 +20,31 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 使用 javax.sound.sampled API
  */
 public class DesktopAudioRecorder implements PlatformAudioRecorder {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(DesktopAudioRecorder.class);
-    
+
     private TargetDataLine targetDataLine;
     private Thread recordingThread;
     private final AtomicBoolean recording = new AtomicBoolean(false);
     private volatile String activeAudioSourceName = "UNKNOWN";
     private PlatformAudioRecorder.AudioDataListener currentListener;
-    
+
     private final AudioFormat audioFormat;
     private final Object ringBufferLock = new Object();
     private final int maxLookbackBytes = AudioFormatSpec.BYTES_PER_SECOND * 300;
     private final byte[] ringBuffer = new byte[maxLookbackBytes];
     private int ringWritePos;
     private long ringTotalWritten;
-    
+
     public DesktopAudioRecorder() {
         this.audioFormat = new AudioFormat(
-            AudioFormatSpec.SAMPLE_RATE,
-            AudioFormatSpec.SAMPLE_SIZE_BITS,
-            AudioFormatSpec.CHANNELS,
-            AudioFormatSpec.SIGNED,
-            AudioFormatSpec.BIG_ENDIAN
-        );
+                AudioFormatSpec.SAMPLE_RATE,
+                AudioFormatSpec.SAMPLE_SIZE_BITS,
+                AudioFormatSpec.CHANNELS,
+                AudioFormatSpec.SIGNED,
+                AudioFormatSpec.BIG_ENDIAN);
     }
-    
+
     @Override
     public boolean start(AudioDataListener listener) {
         if (recording.get()) {
@@ -58,25 +57,25 @@ public class DesktopAudioRecorder implements PlatformAudioRecorder {
             ringWritePos = 0;
             ringTotalWritten = 0L;
         }
-        
+
         try {
             DataLine.Info info = new DataLine.Info(TargetDataLine.class, audioFormat);
-            
+
             if (!AudioSystem.isLineSupported(info)) {
                 logger.error("不支持的音频格式");
                 listener.onError("不支持的音频格式");
                 return false;
             }
-            
+
             targetDataLine = openPreferredTargetLine(info);
             targetDataLine.open(audioFormat, AudioFormatSpec.BUFFER_SIZE);
             targetDataLine.start();
-            
+
             recording.set(true);
-            
+
             recordingThread = new Thread(() -> {
                 byte[] buffer = new byte[AudioFormatSpec.BUFFER_SIZE];
-                
+
                 while (recording.get()) {
                     int bytesRead = targetDataLine.read(buffer, 0, buffer.length);
                     if (bytesRead > 0) {
@@ -85,27 +84,27 @@ public class DesktopAudioRecorder implements PlatformAudioRecorder {
                     }
                 }
             }, "AudioRecorder-Thread");
-            
+
             recordingThread.start();
             logger.info("开始录音");
             return true;
-            
+
         } catch (LineUnavailableException e) {
             logger.error("音频设备不可用", e);
             listener.onError("音频设备不可用: " + e.getMessage());
             return false;
         }
     }
-    
+
     @Override
     public void stop() {
         recording.set(false);
-        
+
         if (targetDataLine != null) {
             targetDataLine.stop();
             targetDataLine.close();
         }
-        
+
         if (recordingThread != null) {
             try {
                 recordingThread.join(1000);
@@ -113,16 +112,16 @@ public class DesktopAudioRecorder implements PlatformAudioRecorder {
                 Thread.currentThread().interrupt();
             }
         }
-        
+
         currentListener = null;
         logger.info("停止录音");
     }
-    
+
     @Override
     public boolean isRecording() {
         return recording.get();
     }
-    
+
     @Override
     public void release() {
         stop();

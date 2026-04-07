@@ -96,7 +96,7 @@ public class DesktopAsrVadGate {
                 if (i - lastSpeechFrame > 3) {
                     int paddedStart = Math.max(0, currentStartFrame - PRE_PADDING_FRAMES);
                     int paddedEnd = Math.min(frameCount - 1, lastSpeechFrame + POST_PADDING_FRAMES);
-                    ranges.add(new int[] {startBytes[paddedStart], endBytes[paddedEnd]});
+                    ranges.add(new int[] { startBytes[paddedStart], endBytes[paddedEnd] });
                     currentStartFrame = -1;
                     lastSpeechFrame = -1;
                 }
@@ -105,7 +105,7 @@ public class DesktopAsrVadGate {
         if (currentStartFrame >= 0 && lastSpeechFrame >= currentStartFrame) {
             int paddedStart = Math.max(0, currentStartFrame - PRE_PADDING_FRAMES);
             int paddedEnd = Math.min(frameCount - 1, lastSpeechFrame + POST_PADDING_FRAMES);
-            ranges.add(new int[] {startBytes[paddedStart], endBytes[paddedEnd]});
+            ranges.add(new int[] { startBytes[paddedStart], endBytes[paddedEnd] });
         }
 
         if (ranges.isEmpty()) {
