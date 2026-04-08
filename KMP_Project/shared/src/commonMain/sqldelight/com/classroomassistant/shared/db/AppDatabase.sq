@@ -1,0 +1,18 @@
+CREATE TABLE setting_entry (
+    key TEXT NOT NULL PRIMARY KEY,
+    string_value TEXT,
+    bool_value INTEGER AS Boolean DEFAULT 0 NOT NULL,
+    int_value INTEGER,
+    updated_at_epoch_ms INTEGER NOT NULL
+);
+
+CREATE TABLE monitoring_event (
+    id TEXT NOT NULL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at_epoch_ms INTEGER NOT NULL
+);
+
+selectAllSettings:
+SELECT *
+FROM setting_entry;
