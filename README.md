@@ -8,6 +8,8 @@
 
 课堂点名应答挂机助手，是一款专为高校学生打造的课堂音频辅助工具，精准解决「水课不想听、又怕被点名提问」的核心痛点。程序全程后台静默运行，实时监听课堂音频，当检测到用户预设的本人姓名被呼叫时，自动回溯点名前的课堂语音内容，通过语音识别转写为文本，再由 AI 快速生成贴合课堂语境、逻辑通顺的口语化应答话术，学生只需照着文本朗读即可完美应对点名提问，全程无需分心听课，轻松实现课堂 “挂机”、私事学习两不误。
 
+安卓安装包下载：https://github.com/JaneJane123654/dianmingbuyongpa/releases
+
 ### 适用场景
 
 - 水课全程挂机：面对内容无意义、学分要求低的水课，无需耗费精力听课，程序后台值守，仅在点名提问时触发响应
@@ -61,6 +63,10 @@ src/       兼容层与历史兼容模块
 ## English Overview
 
 Classroom Roll Call Response Assistant is a speech-driven tool built for college students, perfectly solving the core pain point: you don’t want to sit through low-value filler courses, but fear being cold-called or asked questions in class. The program runs silently in the background, monitoring classroom audio in real time. When it detects your pre-set full name is called, it automatically backtracks the classroom audio recorded before the roll call, converts the speech to text via ASR, and quickly generates a contextually appropriate, logical, and natural spoken response with AI. You can simply read the generated text aloud to respond perfectly, with no need to pay attention to the lecture at all — easily stay "AFK" in class while handling your own important tasks.
+
+Android installation package download：https://github.com/JaneJane123654/dianmingbuyongpa/releases
+
+
 
 ### Use Cases
 

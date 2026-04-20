@@ -1,18 +1,347 @@
 CREATE TABLE setting_entry (
-    key TEXT NOT NULL PRIMARY KEY,
+    namespace TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_type TEXT NOT NULL,
     string_value TEXT,
-    bool_value INTEGER AS Boolean DEFAULT 0 NOT NULL,
+    bool_value INTEGER AS Boolean,
     int_value INTEGER,
-    updated_at_epoch_ms INTEGER NOT NULL
+    long_value INTEGER,
+    updated_at_epoch_ms INTEGER NOT NULL,
+    PRIMARY KEY (namespace, key)
 );
 
 CREATE TABLE monitoring_event (
     id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
     kind TEXT NOT NULL,
+    event_code TEXT,
     payload_json TEXT NOT NULL,
     created_at_epoch_ms INTEGER NOT NULL
 );
 
+-- recording_entry.relative_path is stored relative to AppDirectories.recordingDir.
+CREATE TABLE recording_entry (
+    id TEXT NOT NULL PRIMARY KEY,
+    name_prefix TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    recording_day_key TEXT NOT NULL,
+    transcript_text TEXT,
+    byte_size INTEGER,
+    duration_ms INTEGER,
+    sample_rate_hz INTEGER NOT NULL,
+    channel_count INTEGER NOT NULL,
+    bits_per_sample INTEGER NOT NULL,
+    frame_millis INTEGER NOT NULL,
+    created_at_epoch_ms INTEGER NOT NULL,
+    retention_expires_at_epoch_ms INTEGER,
+    deleted_at_epoch_ms INTEGER
+);
+
+-- install_relative_path is stored relative to AppDirectories.modelDir.
+-- archive_relative_path is stored relative to AppDirectories.cacheDir when present.
+CREATE TABLE model_installation (
+    model_kind TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    display_name TEXT,
+    install_relative_path TEXT NOT NULL,
+    archive_relative_path TEXT,
+    source_url TEXT,
+    source_kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    is_selected INTEGER AS Boolean DEFAULT 0 NOT NULL,
+    last_error_message TEXT,
+    installed_at_epoch_ms INTEGER,
+    verified_at_epoch_ms INTEGER,
+    updated_at_epoch_ms INTEGER NOT NULL,
+    PRIMARY KEY (model_kind, model_id)
+);
+
+CREATE TABLE answer_history (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT,
+    recording_entry_id TEXT,
+    lecture_text TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    answer_text TEXT,
+    provider TEXT,
+    model_name TEXT,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    created_at_epoch_ms INTEGER NOT NULL,
+    completed_at_epoch_ms INTEGER
+);
+
+CREATE INDEX monitoring_event_created_at_idx
+ON monitoring_event(created_at_epoch_ms DESC);
+
+CREATE INDEX monitoring_event_session_idx
+ON monitoring_event(session_id, created_at_epoch_ms DESC);
+
+CREATE INDEX recording_entry_created_at_idx
+ON recording_entry(created_at_epoch_ms DESC);
+
+CREATE INDEX recording_entry_day_idx
+ON recording_entry(recording_day_key, created_at_epoch_ms DESC);
+
+CREATE INDEX model_installation_kind_idx
+ON model_installation(model_kind, updated_at_epoch_ms DESC);
+
+CREATE INDEX model_installation_selected_idx
+ON model_installation(model_kind, is_selected);
+
+CREATE INDEX answer_history_created_at_idx
+ON answer_history(created_at_epoch_ms DESC);
+
+CREATE INDEX answer_history_session_idx
+ON answer_history(session_id, created_at_epoch_ms DESC);
+
 selectAllSettings:
 SELECT *
-FROM setting_entry;
+FROM setting_entry
+ORDER BY namespace, key;
+
+selectSettingsByNamespace:
+SELECT *
+FROM setting_entry
+WHERE namespace = :namespace
+ORDER BY key;
+
+selectSettingEntry:
+SELECT *
+FROM setting_entry
+WHERE namespace = :namespace
+  AND key = :key;
+
+upsertSettingEntry:
+INSERT OR REPLACE INTO setting_entry(
+    namespace,
+    key,
+    value_type,
+    string_value,
+    bool_value,
+    int_value,
+    long_value,
+    updated_at_epoch_ms
+)
+VALUES (
+    :namespace,
+    :key,
+    :valueType,
+    :stringValue,
+    :boolValue,
+    :intValue,
+    :longValue,
+    :updatedAtEpochMs
+);
+
+deleteSettingEntry:
+DELETE FROM setting_entry
+WHERE namespace = :namespace
+  AND key = :key;
+
+selectMonitoringEvents:
+SELECT *
+FROM monitoring_event
+ORDER BY created_at_epoch_ms DESC;
+
+selectMonitoringEventsAfter:
+SELECT *
+FROM monitoring_event
+WHERE created_at_epoch_ms >= :createdAtEpochMs
+ORDER BY created_at_epoch_ms ASC;
+
+insertMonitoringEvent:
+INSERT OR REPLACE INTO monitoring_event(
+    id,
+    session_id,
+    kind,
+    event_code,
+    payload_json,
+    created_at_epoch_ms
+)
+VALUES (
+    :id,
+    :sessionId,
+    :kind,
+    :eventCode,
+    :payloadJson,
+    :createdAtEpochMs
+);
+
+deleteMonitoringEventsBefore:
+DELETE FROM monitoring_event
+WHERE created_at_epoch_ms < :createdAtEpochMs;
+
+selectRecordingEntries:
+SELECT *
+FROM recording_entry
+WHERE deleted_at_epoch_ms IS NULL
+ORDER BY created_at_epoch_ms DESC;
+
+selectRecordingEntryById:
+SELECT *
+FROM recording_entry
+WHERE id = :id;
+
+selectRecordingEntriesCreatedBefore:
+SELECT *
+FROM recording_entry
+WHERE created_at_epoch_ms < :createdAtEpochMs
+ORDER BY created_at_epoch_ms ASC;
+
+upsertRecordingEntry:
+INSERT OR REPLACE INTO recording_entry(
+    id,
+    name_prefix,
+    relative_path,
+    recording_day_key,
+    transcript_text,
+    byte_size,
+    duration_ms,
+    sample_rate_hz,
+    channel_count,
+    bits_per_sample,
+    frame_millis,
+    created_at_epoch_ms,
+    retention_expires_at_epoch_ms,
+    deleted_at_epoch_ms
+)
+VALUES (
+    :id,
+    :namePrefix,
+    :relativePath,
+    :recordingDayKey,
+    :transcriptText,
+    :byteSize,
+    :durationMs,
+    :sampleRateHz,
+    :channelCount,
+    :bitsPerSample,
+    :frameMillis,
+    :createdAtEpochMs,
+    :retentionExpiresAtEpochMs,
+    :deletedAtEpochMs
+);
+
+markRecordingDeleted:
+UPDATE recording_entry
+SET deleted_at_epoch_ms = :deletedAtEpochMs
+WHERE id = :id;
+
+deleteSoftDeletedRecordingsBefore:
+DELETE FROM recording_entry
+WHERE deleted_at_epoch_ms IS NOT NULL
+  AND deleted_at_epoch_ms < :deletedAtEpochMs;
+
+selectModelInstallations:
+SELECT *
+FROM model_installation
+ORDER BY model_kind, updated_at_epoch_ms DESC, model_id;
+
+selectModelInstallationsByKind:
+SELECT *
+FROM model_installation
+WHERE model_kind = :modelKind
+ORDER BY updated_at_epoch_ms DESC, model_id;
+
+selectModelInstallation:
+SELECT *
+FROM model_installation
+WHERE model_kind = :modelKind
+  AND model_id = :modelId;
+
+selectSelectedModelInstallationByKind:
+SELECT *
+FROM model_installation
+WHERE model_kind = :modelKind
+  AND is_selected = 1
+LIMIT 1;
+
+upsertModelInstallation:
+INSERT OR REPLACE INTO model_installation(
+    model_kind,
+    model_id,
+    display_name,
+    install_relative_path,
+    archive_relative_path,
+    source_url,
+    source_kind,
+    status,
+    is_selected,
+    last_error_message,
+    installed_at_epoch_ms,
+    verified_at_epoch_ms,
+    updated_at_epoch_ms
+)
+VALUES (
+    :modelKind,
+    :modelId,
+    :displayName,
+    :installRelativePath,
+    :archiveRelativePath,
+    :sourceUrl,
+    :sourceKind,
+    :status,
+    :isSelected,
+    :lastErrorMessage,
+    :installedAtEpochMs,
+    :verifiedAtEpochMs,
+    :updatedAtEpochMs
+);
+
+clearSelectedModelInstallationByKind:
+UPDATE model_installation
+SET is_selected = 0,
+    updated_at_epoch_ms = :updatedAtEpochMs
+WHERE model_kind = :modelKind;
+
+deleteModelInstallation:
+DELETE FROM model_installation
+WHERE model_kind = :modelKind
+  AND model_id = :modelId;
+
+selectAnswerHistoryPage:
+SELECT *
+FROM answer_history
+ORDER BY created_at_epoch_ms DESC
+LIMIT :limit
+OFFSET :offset;
+
+selectAnswerHistoryById:
+SELECT *
+FROM answer_history
+WHERE id = :id;
+
+insertAnswerHistory:
+INSERT OR REPLACE INTO answer_history(
+    id,
+    session_id,
+    recording_entry_id,
+    lecture_text,
+    prompt_text,
+    answer_text,
+    provider,
+    model_name,
+    status,
+    error_message,
+    created_at_epoch_ms,
+    completed_at_epoch_ms
+)
+VALUES (
+    :id,
+    :sessionId,
+    :recordingEntryId,
+    :lectureText,
+    :promptText,
+    :answerText,
+    :provider,
+    :modelName,
+    :status,
+    :errorMessage,
+    :createdAtEpochMs,
+    :completedAtEpochMs
+);
+
+deleteAnswerHistoryBefore:
+DELETE FROM answer_history
+WHERE created_at_epoch_ms < :createdAtEpochMs;
