@@ -116,3 +116,17 @@ core/      Platform-independent core logic (name wake-up, audio cache, speech in
 desktop/   Full desktop implementation (based on JavaFX)
 android/   Full Android mobile implementation
 src/       Compatibility layer and legacy compatible modules
+
+---
+
+## 程序运行截图
+
+![程序运行截图1](程序运行图片/微信图片_20260512161359_177_141.jpg)
+![程序运行截图2](程序运行图片/微信图片_20260512161401_178_141.jpg)
+![程序运行截图3](程序运行图片/微信图片_20260512161402_179_141.jpg)
+![程序运行截图4](程序运行图片/微信图片_20260512161405_180_141.jpg)
+![程序运行截图5](程序运行图片/微信图片_20260512161406_181_141.jpg)
+![程序运行截图6](程序运行图片/微信图片_20260512161408_182_141.jpg)
+![程序运行截图7](程序运行图片/微信图片_20260512161410_183_141.jpg)
+![程序运行截图8](程序运行图片/微信图片_20260512161412_184_141.jpg)
+![课堂截图](程序运行图片/课堂.jpg)
